@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="ToneGenerator" name="Tone Generator" projectType="guiapp"
+              useAppConfig="0" addUsingNamespaceToJuceHeader="0" displaySplashScreen="1"
+              jucerFormatVersion="1" version="1.0.0" bundleIdentifier="com.yourcompany.tonegenerator"
+              includeBinaryInAppConfig="1" includeBinaryInPluginConfig="1"
+              pluginName="Tone Generator" pluginDesc="Tone Generator" pluginManufacturer="Your Company"
+              pluginCode="Tone" pluginChannelConfigs="{1, 1}, {2, 2}" pluginIsSynth="0"
+              pluginWantsMidiIn="0" pluginProducesMidiOut="0" pluginIsMidiEffectPlugin="0"
+              pluginEditorRequiresKeys="0" pluginAUExportPrefix="ToneGeneratorAU"
+              pluginRTASCategory="ePlugInCategory_None" aaxIdentifier="com.yourcompany.tonegenerator"
+              pluginAAXCategory="2" cppLanguageStandard="17" allowAllCodeSigningIdentities="0"
+              useLocalCopy="0" projectLineFeed="&#10;" companyName="Your Company"
+              companyWebsite="www.yourcompany.com" companyEmail="info@yourcompany.com"
+              pluginFormats="buildAU, buildVST3" pluginVST3Category="Instrument,Synth"
+              pluginAUMainType="'aumu'" pluginVSTCategory="kPlugCategSynth"
+              viewportScrollBarThickness="18" openGLVersion="2.1" headerPath=""
+              resourceFile="" cppFlags="" linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"
+              pluginCharacteristicsValue="pluginWantsMidiIn,pluginProducesMidiOut,pluginIsMidiEffectPlugin,pluginEditorRequiresKeys">
+  <MAINGROUP id="ToneGenerator" name="Tone Generator">
+    <GROUP id="{D1A1BB0A-1234-5678-9ABC-DEF012345678}" name="Source">
+      <FILE id="Main.cpp" name="Main.cpp" compile="1" resource="0" file="Source/Main.cpp"/>
+      <FILE id="MainComponent.mm" name="MainComponent.mm" compile="1" resource="0"
+            file="Source/MainComponent.mm"/>
+      <FILE id="MainComponent.h" name="MainComponent.h" compile="0" resource="0"
+            file="Source/MainComponent.h"/>
+      <FILE id="ToneGenerator.cpp" name="ToneGenerator.cpp" compile="1" resource="0"
+            file="Source/ToneGenerator.cpp"/>
+      <FILE id="ToneGenerator.h" name="ToneGenerator.h" compile="0" resource="0"
+            file="Source/ToneGenerator.h"/>
+      <FILE id="LookAndFeelMinimal.h" name="LookAndFeelMinimal.h" compile="0"
+            resource="0" file="Source/LookAndFeelMinimal.h"/>
+      <FILE id="Theme.h" name="Theme.h" compile="0" resource="0" file="Source/Theme.h"/>
+      <FILE id="PadSynthesizer.cpp" name="PadSynthesizer.cpp" compile="1"
+            resource="0" file="Source/PadSynthesizer.cpp"/>
+      <FILE id="PadSynthesizer.h" name="PadSynthesizer.h" compile="0" resource="0"
+            file="Source/PadSynthesizer.h"/>
+      <FILE id="PadVoice.cpp" name="PadVoice.cpp" compile="1" resource="0"
+            file="Source/PadVoice.cpp"/>
+      <FILE id="PadVoice.h" name="PadVoice.h" compile="0" resource="0" file="Source/PadVoice.h"/>
+      <FILE id="PadSound.cpp" name="PadSound.cpp" compile="1" resource="0"
+            file="Source/PadSound.cpp"/>
+      <FILE id="PadSound.h" name="PadSound.h" compile="0" resource="0" file="Source/PadSound.h"/>
+    </GROUP>
+  </MAINGROUP>
+  <EXPORTFORMATS>
+    <XCODE_MAC targetFolder="Builds/MacOSX" osxSDK="default" osxCompatibility="10.15"
+               osxArchitecture="x86_64;arm64" xcodeArchs="x86_64;arm64" optimization="3"
+               targetName="Tone Generator" preprocessorDefs="JUCER_MAC=1&#10;JUCE_APP=1&#10;JUCE_APPLICATION_NAME_STRING=&quot;Tone Generator&quot;&#10;JUCE_APPLICATION_VERSION_STRING=&quot;1.0.0&quot;&#10;JUCE_DISPLAY_SPLASH_SCREEN=1&#10;JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1&#10;JUCE_STRICT_REFCOUNTEDPOINTER=1&#10;JUCE_USER_DEFAULT_SETTINGS_INCLUDED=1&#10;JUCE_WEB_BROWSER=0&#10;JUCE_USE_CURL=0"
+               headerPath="" resourceFile="" cppFlags="" linkFlags="" binaryDataNamespace="BinaryData">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE-8.0.10/modules"/>
+      </MODULEPATHS>
+      <MODULES>
+        <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+      </MODULES>
+    </XCODE_MAC>
+    <XCODE_IPHONE targetFolder="Builds/iOS" iosSDK="default" iosCompatibility="11.0"
+                  iosArchitecture="arm64" xcodeArchs="arm64" optimization="3" targetName="Tone Generator"
+                  preprocessorDefs="JUCER_IOS=1&#10;JUCE_APP=1&#10;JUCE_APPLICATION_NAME_STRING=&quot;Tone Generator&quot;&#10;JUCE_APPLICATION_VERSION_STRING=&quot;1.0.0&quot;&#10;JUCE_DISPLAY_SPLASH_SCREEN=1&#10;JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1&#10;JUCE_STRICT_REFCOUNTEDPOINTER=1&#10;JUCE_USER_DEFAULT_SETTINGS_INCLUDED=1&#10;JUCE_WEB_BROWSER=0&#10;JUCE_USE_CURL=0"
+                  headerPath="" resourceFile="" cppFlags="" linkFlags="" binaryDataNamespace="BinaryData">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE-8.0.10/modules"/>
+      </MODULEPATHS>
+      <MODULES>
+        <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+      </MODULES>
+    </XCODE_IPHONE>
+    <ANDROIDSTUDIO targetFolder="Builds/Android" androidMinSDK="21" androidTargetSDK="33"
+                   androidCppStandard="17" androidArchitecture="arm64-v8a" optimization="3"
+                   targetName="Tone Generator" preprocessorDefs="JUCER_ANDROID=1&#10;JUCE_APP=1&#10;JUCE_APPLICATION_NAME_STRING=&quot;Tone Generator&quot;&#10;JUCE_APPLICATION_VERSION_STRING=&quot;1.0.0&quot;&#10;JUCE_DISPLAY_SPLASH_SCREEN=1&#10;JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1&#10;JUCE_STRICT_REFCOUNTEDPOINTER=1&#10;JUCE_USER_DEFAULT_SETTINGS_INCLUDED=1&#10;JUCE_WEB_BROWSER=0&#10;JUCE_USE_CURL=0"
+                   headerPath="" resourceFile="" cppFlags="" linkFlags="" binaryDataNamespace="BinaryData">
+      <CONFIGURATIONS>
+        <CONFIGURATION isDebug="1" name="Debug" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+        <CONFIGURATION isDebug="0" name="Release" headerPath="" resourceFile="" cppFlags=""
+                       linkFlags="" targetFolder="" binaryDataNamespace="BinaryData"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_dsp" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE-8.0.10/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE-8.0.10/modules"/>
+      </MODULEPATHS>
+      <MODULES>
+        <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+        <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+      </MODULES>
+    </ANDROIDSTUDIO>
+  </EXPORTFORMATS>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  </MODULES>
+  <JUCEOPTIONS/>
+</JUCERPROJECT>

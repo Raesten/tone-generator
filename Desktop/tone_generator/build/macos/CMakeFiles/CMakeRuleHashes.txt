@@ -1,3 +1,0 @@
-# Hashes of file build rules.
-6377cd407415c48aea014be36b561ac3 ToneGenerator_artefacts/JuceLibraryCode/JuceHeader.h
-2a6dbf05bb2a462d6f6b5907c0e56154 ToneGenerator_artefacts/JuceLibraryCode/ToneGenerator/PkgInfo

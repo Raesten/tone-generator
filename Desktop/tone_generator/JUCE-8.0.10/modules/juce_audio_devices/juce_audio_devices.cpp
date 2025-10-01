@@ -95,7 +95,7 @@
   #include <juce_graphics/native/juce_CoreGraphicsHelpers_mac.h>
  #endif
 
- #include "native/juce_Audio_ios.cpp"
+ #include "native/juce_Audio_ios.mm"
  #include "native/juce_CoreMidi_mac.mm"
 
 //==============================================================================

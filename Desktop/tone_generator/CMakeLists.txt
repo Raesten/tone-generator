@@ -28,8 +28,11 @@ juce_generate_juce_header(ToneGenerator)
 # Add source files
 target_sources(ToneGenerator PRIVATE
     Source/Main.cpp
-    Source/MainComponent.cpp
+    Source/MainComponent.mm
     Source/ToneGenerator.cpp
+    Source/PadVoice.cpp
+    Source/PadSound.cpp
+    Source/PadSynthesizer.cpp
 )
 
 # Link JUCE modules

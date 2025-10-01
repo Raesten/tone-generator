@@ -106,37 +106,801 @@ If needed, you can further use the `web_scraper.py` file to scrape the web page 
 - **CMake vs Projucer for iOS**: For iOS projects, Projucer GUI is more reliable than CMake for generating Xcode projects. CMake iOS builds often fail due to code signing and provisioning profile requirements.
 - **AudioAppComponent Architecture**: Always call `setAudioChannels(0, 2)` in the MainComponent constructor to initialize audio device with stereo output. This is crucial for cross-platform audio applications.
 - **JUCE Module Dependencies**: When using CMake, ensure all required JUCE modules are linked via `target_link_libraries`. The `juce_add_gui_app` macro handles basic linking, but additional modules like `juce_audio_devices` must be explicitly linked.
+- **JUCE Layout Recursion Prevention**: Never call `resized()` from within `updateResponsiveLayout()` or similar layout methods. This creates infinite recursion and stack overflow. Instead, let JUCE's natural layout system handle resize events automatically.
+- **iOS Simulator Audio Route Issue**: Classic "iOS Simulator has no valid audio route" causes 0 Hz sample rate and AudioQueue creation failure. Fix with: (A) Simulator I/O → Audio Output → select real device, (B) AVAudioSession setup before device opening (setCategory:Playback, preferredSampleRate:44100), (C) Safe JUCE init with sample rate validation and fallback defaults. Real devices rarely have this issue.
+- **JUCE Audio Initialization Best Practice**: Call `setAudioChannels()` only once in constructor, never re-call it. Re-calling can tear down and re-open audio device with half-applied state. Use JUCE's `deviceManager.initialise()` and `getAudioDeviceSetup()`/`setAudioDeviceSetup()` for robust audio setup with fallback defaults.
+- **iOS AVAudioSession Setup**: On iOS, configure AVAudioSession before opening audio device to prevent route and sample rate ambiguity. Use `setCategory:AVAudioSessionCategoryPlayback` with `MixWithOthers` option, `setPreferredSampleRate:44100`, and `setActive:YES`. This removes ambiguity about audio route and sample rate, especially on first launch.
+- **JUCE Label Truncation Prevention**: Use `setMinimumHorizontalScale(0.6f)` on labels to prevent text truncation (e.g., "Volun" instead of "Volume"). This allows labels to shrink horizontally while maintaining readability. Apply to all labels that might be constrained in width, especially in advanced controls and responsive layouts.
+- **JUCE Viewport Scroll Bar Styling**: To hide scroll bar artifacts that look like column dividers, use `setScrollBarsShown(false, true)` to hide horizontal scroll bars and `getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, juce::Colours::transparentBlack)` to make vertical scroll bars transparent. This prevents visual artifacts in Grid layouts with multiple columns.
+- **Button Hit Target Sizing**: Ensure minimum 44×44pt hit targets for accessibility on small phones. Use `constexpr int minTap = 44; auto btnW = jmax(minTap, availableW / cols - gap); auto btnH = jmax(minTap, btnW);` for proper button sizing. Update theme constants and component sizing to meet this minimum requirement.
+- **WCAG AA Contrast Compliance**: Improve text contrast for better legibility by updating dim text from #9AA3AB to #C3CBD3 and card background from #1B1D20 to #17191C. This ensures better contrast ratios for accessibility compliance and improved readability on dark backgrounds.
+- **48 kHz End-to-End Audio**: Prefer 48 kHz sample rate end-to-end by using the actual sample rate from AVAudioSession in prepareToPlay() instead of coercing to 44.1 kHz. This maintains audio quality and reduces unnecessary sample rate conversions.
+- **iOS Haptic Feedback**: Add delightful haptic feedback on button presses using `UIImpactFeedbackGenerator` with `UIImpactFeedbackStyleMedium`. Apply to note buttons, chord buttons, and play/stop button for enhanced user experience.
+- **Proper Audio Initialization**: Remove fixed sleep delays and use proper AVAudioSession route change notifications to ensure audio is initialized only after a valid route exists. This prevents timing issues and improves reliability.
+- **Audio Interruption Handling**: Implement proper interruption handling for phone calls and route changes using `AVAudioSessionInterruptionNotification`. On interruption begin: close audio device and stop all notes gracefully. On interruption end: reactivate session and reopen audio channels with proper timing. Clean up notification observers in destructor.
+- **State Persistence**: Implement comprehensive state persistence using `juce::PropertiesFile` to save and restore user settings including waveform selection, volume levels, selected notes, frequency, advanced controls visibility, and all synthesizer parameters. Auto-save after 3 seconds of inactivity and save on app shutdown.
+- **VoiceOver Accessibility**: Implement VoiceOver accessibility support with `setAccessible(true)` on all interactive components and proper focus order. Focus order: note grid first (1-12), then chord buttons (13-16), then transport controls (17-18), then waveform controls (19-22), then volume controls (23-25), then advanced controls toggle (26), and finally advanced sliders (27+). This ensures logical navigation for users with visual impairments.
+- **Responsive Grid Tightening**: Implement responsive grid tightening to avoid big gaps on the right in 2-column view by computing optimal columns from width. Use `int cols = juce::jlimit(3, 6, getWidth() / 110)` for note buttons, `int chordCols = juce::jlimit(2, 4, getWidth() / 140)` for chord buttons, and `int advancedCols = juce::jlimit(2, 4, getWidth() / 120)` for advanced controls. Clear and rebuild `templateColumns` dynamically for optimal spacing.
+- **Status Area Stabilization**: Center status text and reserve height to prevent jumping when text changes. Use `setMinimumHorizontalScale(0.8f)` on status labels and set fixed heights with `setSize(getWidth(), height)` to maintain stable layout. Use fixed pixel heights in grid template rows to prevent layout shifts.
 
 # Scratchpad
 
-## Current Task: Fix Cross-Platform JUCE Project Issues
+## Current Task: Tighter Gap-Free Grids Bonus - COMPLETED ✅
 
-**Task Description**: Fix the identified issues in the cross-platform JUCE Tone Generator project:
-1. Android build API level compatibility issue
-2. iOS project setup using Projucer
-3. Verify all platforms are working correctly
+**Task Description**: Implement tighter, gap-free grids to prevent odd columns and ensure consistent spacing by computing optimal columns from width and using fixed Px tracks.
+
+**Requirements**:
+- Compute columns from width to prevent odd columns
+- Use fixed Px tracks instead of withWidth/withHeight on items
+- Implement gap-free grid layout with proper tile sizing
+- Test build and verify tighter grid layout
 
 **Progress**:
-[X] Fix Android build API level from 19 to 33 (compatible with NDK 25.2.9519653)
-[X] Update Android build script to use correct API level and CPU core detection
-[X] Test Android build - SUCCESS: Generated libToneGenerator.so (97MB ARM shared library)
-[X] Verify macOS build still working - SUCCESS: Tone Generator.app running
-[ ] Create iOS project using Projucer (STOPPED - user requested)
-[ ] Test iOS build and deployment (STOPPED - user requested)
-[ ] Update verification report with final status (STOPPED - user requested)
+[X] Compute optimal columns from width to prevent odd columns
+[X] Use fixed Px tracks instead of withWidth/withHeight on items
+[X] Implement gap-free grid layout with proper tile sizing
+[X] Test build and verify tighter grid layout
+
+**Final Status**: 
+- ✅ **Column Computation**: Optimal columns computed from width to prevent odd columns
+- ✅ **Fixed Px Tracks**: Grid uses fixed Px tracks instead of withWidth/withHeight on items
+- ✅ **Gap-Free Layout**: Implemented gap-free grid layout with proper tile sizing
+- ✅ **Build Success**: Application compiles and builds successfully with tighter grid layout
+
+**Key Features Implemented**:
+- **Column Calculation**: `int cols = juce::jlimit(3, 6, (noteArea.getWidth() + gap) / (minTap + gap));`
+- **Row Calculation**: `int rows = (12 + cols - 1) / cols;`
+- **Tile Sizing**: `int tile = juce::jmax(minTap, (noteArea.getWidth() - (cols - 1) * gap) / cols);`
+- **Fixed Tracks**: `noteGrid.templateColumns.add(juce::Grid::TrackInfo(juce::Grid::Px(tile)));`
+- **Gap Management**: `noteGrid.rowGap = noteGrid.columnGap = juce::Grid::Px(gap);`
+- **Item Addition**: `for (auto& b : noteButtons) noteGrid.items.add(juce::GridItem(b));`
+
+**Technical Implementation**:
+- **Grid Variable**: Renamed from `note` to `noteGrid` for clarity
+- **Column Optimization**: Computes optimal columns (3-6) based on available width
+- **Fixed Track Sizing**: Uses `juce::Grid::Px(tile)` for exact sizing without gaps
+- **No Item Sizing**: Items don't use withWidth/withHeight, let tracks size them
+- **Exact Layout**: `noteGrid.performLayout(noteArea.withHeight(rows * tile + (rows - 1) * gap));`
+
+**Result**: The note grid now has tighter, gap-free spacing that prevents odd columns and ensures consistent tile sizing across different screen widths. The grid automatically adapts to the available space while maintaining optimal button sizes and spacing.
+
+## Previous Task: Play Button Floating Fix - COMPLETED ✅
+
+**Task Description**: Fix play button floating and overlapping when toggling between panels by properly pinning it to the bottom after safe-area and giving the remainder to the active panel.
+
+**Requirements**:
+- Pin play button to bottom after safe-area with proper gap
+- Remove hard-coded removeFromTop math that causes floating
+- Give remainder content area to active panel
+- Test build and verify play button stays fixed at bottom
+
+**Progress**:
+[X] Pin play button to bottom after safe-area with proper gap
+[X] Remove hard-coded removeFromTop math that causes floating
+[X] Give remainder content area to active panel
+[X] Test build and verify play button stays fixed at bottom
+
+**Final Status**: 
+- ✅ **Bottom Pinning**: Play button now pinned to bottom after safe-area with proper gap
+- ✅ **Removed Hard-coded Math**: Eliminated floating issues from removeFromTop calculations
+- ✅ **Content Area Management**: Remainder content area properly given to active panel
+- ✅ **Build Success**: Application compiles and builds successfully with play button fixes
+
+**Key Features Implemented**:
+- **Bottom Pinning**: `auto playBar = root.removeFromBottom(playH); playStopButton.setBounds(playBar.reduced(gap));`
+- **Proper Layout Order**: Play button reserved first, then header elements, then content area
+- **Content Area Calculation**: `auto content = root.reduced(gap);` gives remainder to active panel
+- **Safe-Area Integration**: Play button respects safe-area insets and is positioned after them
+- **Fixed Height**: Consistent 64px play button height with 12px gap
+
+**Technical Implementation**:
+- **Layout Order**: Safe-area → Play button → Header elements → Content area
+- **Play Button Positioning**: `root.removeFromBottom(playH)` reserves bottom space first
+- **Content Area**: Remaining space after play button and headers given to active panel
+- **Gap Management**: Consistent 12px gap throughout layout system
+- **Single-Panel Mode**: Content area properly distributed between playPanel and advancedVP
+
+**Result**: The play button now stays fixed at the bottom and no longer floats or overlaps when toggling between panels. The layout system properly reserves space for the play button and distributes the remaining content area to the active panel.
+
+## Previous Task: Chord Button Clipping Fix - COMPLETED ✅
+
+**Task Description**: Fix chord buttons clipping into the card edge by properly calculating the grid area with card padding and grid inset, and ensuring grid items don't extend past the rounded card boundaries.
+
+**Requirements**:
+- Add card padding and grid inset constants to Theme.h
+- Apply card padding and grid inset to prevent chord button clipping
+- Remove per-item withWidth/withHeight sizing to prevent overflow
+- Calculate proper grid area with Theme card padding
+- Ensure chord buttons stay within card boundaries
+
+**Progress**:
+[X] Add card padding and grid inset constants to Theme.h
+[X] Apply card padding and grid inset to prevent chord button clipping
+[X] Remove per-item withWidth/withHeight sizing to prevent overflow
+[X] Calculate proper grid area with Theme card padding
+[X] Test build and verify chord buttons stay within card boundaries
+
+**Final Status**: 
+- ✅ **Theme Constants Added**: Added `cardPadding = 16` and `gridInset = 8` to Theme.h
+- ✅ **Card Padding Applied**: `auto card = chordArea.reduced(Theme::cardPadding)` for inner padding
+- ✅ **Grid Inset Applied**: `auto gridArea = card.reduced(Theme::gridInset)` for additional inset
+- ✅ **Fixed Track Sizing**: Removed per-item withWidth/withHeight, let tracks size items
+- ✅ **Proper Height Calculation**: `gridArea.withHeight(chordRows * chordH + (chordRows - 1) * gap)`
+- ✅ **Build Success**: Application compiles and builds successfully with chord clipping fixes
+
+**Key Features Implemented**:
+- **Card Padding**: `Theme::cardPadding = 16` provides inner padding for card content
+- **Grid Inset**: `Theme::gridInset = 8` provides additional inset for grid layouts
+- **Proper Area Calculation**: Grid area calculated from `gridArea` instead of `chordArea`
+- **Fixed Track Sizing**: Grid tracks use fixed `Px(chordW)` and `Px(chordH)` sizing
+- **No Overflow Prevention**: Removed per-item sizing that could cause overflow
+- **Exact Height Layout**: Grid layout uses calculated height to prevent clipping
+
+**Technical Implementation**:
+- **Theme Constants**: Added `cardPadding` and `gridInset` to Theme.h metrics
+- **Area Reduction**: `chordArea.reduced(Theme::cardPadding).reduced(Theme::gridInset)`
+- **Grid Area Usage**: All calculations use `gridArea` instead of `chordArea`
+- **Track Sizing**: Fixed `juce::Grid::Px(chordW)` and `juce::Grid::Px(chordH)` tracks
+- **Height Calculation**: `chordRows * chordH + (chordRows - 1) * gap` for exact height
+- **Item Sizing**: Let grid tracks size items instead of per-item withWidth/withHeight
+
+**Result**: The chord buttons now stay properly within the card boundaries and no longer clip into the rounded card edges. The grid layout respects both card padding and grid inset, ensuring proper spacing and preventing visual overflow.
+
+## Previous Task: Advanced Panel Overlap Fix - COMPLETED ✅
+
+**Task Description**: Fix advanced panel overlapping with "Play"/chord buttons in landscape mode by implementing single-panel mode where exactly one panel is visible and laid out at a time.
+
+**Requirements**:
+- Implement single-panel mode in resized() method
+- Set invisible panel bounds to (0,0,0,0) to prevent painting/hits
+- Compute inner content height for advanced panel scrolling
+- Ensure no visual overlap between panels in any orientation
+
+**Progress**:
+[X] Implement single-panel mode in resized() method
+[X] Set invisible panel bounds to (0,0,0,0) to prevent painting/hits
+[X] Compute inner content height for advanced panel scrolling
+[X] Test build and verify no overlap in landscape mode
+
+**Final Status**: 
+- ✅ **Single-Panel Mode**: Exactly one panel is visible and laid out at a time
+- ✅ **Zero Bounds for Hidden Panels**: Invisible panels set to (0,0,0,0) to prevent painting/hits
+- ✅ **Proper Content Height**: Advanced panel inner content sized for scrolling
+- ✅ **No Visual Overlap**: Panels no longer overlap in landscape or portrait mode
+- ✅ **Build Success**: Application compiles and builds successfully with single-panel mode
+
+**Key Features Implemented**:
+- **Conditional Panel Visibility**: `playPanel.setVisible(!showAdvanced)` and `advancedVP.setVisible(showAdvanced)`
+- **Zero Bounds Prevention**: `setBounds(0,0,0,0)` for invisible panels prevents painting and hit testing
+- **Content Area Management**: Only the active panel gets the full content rectangle
+- **Inner Content Sizing**: Advanced panel content sized to `innerH = rows * rowH + (rows - 1) * gap + 24`
+- **Layout Isolation**: Each panel only processes its own layout when visible
+
+**Technical Implementation**:
+- **Single-Panel Logic**: `if (showAdvanced)` branch hides play panel and shows advanced panel
+- **Zero Bounds**: `playPanel.setBounds(0,0,0,0)` and `advancedVP.setBounds(0,0,0,0)` for hidden panels
+- **Content Rectangle**: `auto content = r.reduced(12)` used only for the active panel
+- **Scrollable Content**: Advanced panel inner height calculated for proper scrolling
+- **Layout Optimization**: `layoutNotesAndChords()` only called when play panel is visible
+
+**Result**: The advanced panel no longer overlaps with the "Play"/chord buttons in landscape mode. The single-panel mode ensures exactly one panel is visible and properly laid out at any time, eliminating visual conflicts and improving the user experience across all orientations.
+
+## Previous Task: Advanced Controls Scrollbar Artifacts Fix - COMPLETED ✅
+
+**Task Description**: Fix stray vertical "bars" on the Advanced screen that are viewport scrollbars/dividers from the play panel still visible underneath or the Viewport's own scrollbar track.
+
+**Requirements**:
+- Hide both horizontal and vertical scrollbars completely on advanced viewport
+- Hide divider component when showing advanced controls
+- Guard layout so notes/chords aren't laid out when advanced is showing
+- Set divider bounds to zero when advanced controls are visible
+
+**Progress**:
+[X] Hide both horizontal and vertical scrollbars completely on advanced viewport
+[X] Add divider hiding logic to advanced controls toggle
+[X] Guard layout to prevent notes/chords layout when advanced is showing
+[X] Set divider bounds to zero when advanced controls are visible
+[X] Test build and verify compilation success
+
+**Final Status**: 
+- ✅ **Scrollbar Hiding Complete**: Both horizontal and vertical scrollbars are completely hidden
+- ✅ **Divider Management**: Divider component is hidden and bounds set to zero when advanced controls are shown
+- ✅ **Layout Guarding**: Notes/chords layout is only called when not showing advanced controls
+- ✅ **Build Success**: Application compiles and builds successfully with all scrollbar fixes
+- ✅ **Clean Advanced View**: No more stray vertical bars or visual artifacts in advanced controls
+
+**Key Features Implemented**:
+- **Complete Scrollbar Hiding**: Uses `setScrollBarsShown(false, false)` to hide both scrollbars
+- **Transparent Scrollbar Colors**: Sets both thumb and track colors to transparent black
+- **Divider Visibility Control**: `dividerComponent.setVisible(!showAdvanced)` and `setBounds(0,0,0,0)`
+- **Conditional Layout**: `if (!showAdvanced) layoutNotesAndChords(panelArea)` prevents unnecessary layout
+- **Consistent Toggle Logic**: Applied to both onClick callback and onAdvancedControlsToggle() method
+
+**Technical Implementation**:
+- **Viewport Configuration**: `advancedVP.setScrollBarsShown(false, false)` for complete scrollbar hiding
+- **Scrollbar Styling**: `setColour(juce::ScrollBar::thumbColourId, juce::Colours::transparentBlack)` and `trackColourId`
+- **Divider Management**: Hide divider and set zero bounds when advanced controls are active
+- **Layout Optimization**: Only layout notes/chords when play panel is visible
+- **State Synchronization**: Both toggle methods maintain consistent visibility state
+
+**Result**: The Advanced Controls screen now displays cleanly without any stray vertical bars, scrollbar artifacts, or visual dividers. The viewport is completely clean and the layout system is optimized to only process visible components.
+
+## Previous Task: Advanced Controls Layout Fix - COMPLETED ✅
+
+**Task Description**: Fix the "Advanced Controls" view spacing issues where note tiles were showing spaced-out and overlapping with the advanced controls panel.
+
+**Requirements**:
+- Fix note grid layout to use proper grid tracks instead of withWidth/withHeight sizing
+- Center the grid and compute exact tile size from container and gaps
+- Give Advanced Controls its own component + viewport and only lay it out when visible
+- Hide scroll bar track artifacts in the advanced controls
+
+**Progress**:
+[X] Fix note grid layout to use proper grid tracks instead of withWidth/withHeight sizing
+[X] Center the grid and compute exact tile size from container and gaps
+[X] Give Advanced Controls its own component + viewport and only lay it out when visible
+[X] Hide scroll bar track artifacts in the advanced controls
+[X] Fix Grid API compatibility issues (AlignContent/JustifyContent)
+[X] Test build and verify compilation success
+
+**Final Status**: 
+- ✅ **Note Grid Layout Fixed**: Replaced withWidth/withHeight sizing with proper grid tracks using fixed Px(tile) sizing
+- ✅ **Grid Centering**: Implemented proper centering with exact tile size calculation from container and gaps
+- ✅ **Advanced Controls Separation**: Advanced controls now have their own viewport and only layout when visible
+- ✅ **Scrollbar Artifacts Hidden**: Disabled both horizontal and vertical scrollbars to prevent visual artifacts
+- ✅ **Build Success**: Application compiles and builds successfully with all layout fixes
+
+**Key Features Implemented**:
+- **Proper Grid Tracks**: Uses fixed `juce::Grid::Px(tile)` sizing instead of per-item withWidth/withHeight
+- **Exact Tile Calculation**: Computes precise tile size that fits within container: `(noteArea.getWidth() - (cols - 1) * gap) / cols`
+- **Grid Centering**: Vertically centers the grid within the note area to eliminate "big empty strip" on the right
+- **Advanced Controls Isolation**: Only layouts advanced controls when visible, preventing overlap with note grid
+- **Clean Viewport**: Hides scrollbars completely to prevent visual artifacts that looked like column dividers
+
+**Technical Implementation**:
+- **Grid Configuration**: Uses `juce::Grid::AlignContent::center` and `juce::Grid::JustifyContent::center` for proper alignment
+- **Fixed Track Sizing**: Creates exact column/row tracks with `juce::Grid::TrackInfo(juce::Grid::Px(tile))`
+- **Responsive Columns**: Chooses optimal column count (3-6) based on available width: `(noteArea.getWidth() + gap) / (minTap + gap)`
+- **Viewport Management**: Advanced controls container only gets bounds when visible, otherwise set to empty rectangle
+- **Scrollbar Hiding**: Uses `setScrollBarsShown(false, false)` to hide both scrollbars
+
+**Result**: The note grid now displays with proper spacing and no weird columns/gaps, and the advanced controls panel no longer overlaps with or interferes with the note grid layout.
+
+## Current Task: Advanced Controls Panel Implementation - COMPLETED ✅
+
+**Task Description**: Implement a dedicated AdvancedPanel component with its own viewport to replace the old advanced controls system and provide better organization.
+
+**Requirements**:
+- Create dedicated AdvancedPanel component that owns the sliders
+- When checkbox is on, make it visible and lay it out; otherwise hide it
+- Put the panel inside a Viewport so short phones can scroll
+- Hide the scrollbar track so you don't get the grey divider
+- Populate sliders with synth parameters (example names)
+
+**Progress**:
+[X] Create dedicated AdvancedPanel component with its own viewport
+[X] Update MainComponent.h to include AdvancedPanel and Viewport
+[X] Implement AdvancedPanel resized() method and slider management
+[X] Update MainComponent initialization to use new AdvancedPanel
+[X] Update resized() method to use new AdvancedPanel viewport
+[X] Fix compilation errors and test build success
+
+**Final Status**: 
+- ✅ **AdvancedPanel Component**: Created dedicated component with 12 sliders and labels in a 3x4 grid
+- ✅ **Viewport Integration**: AdvancedPanel is contained within a Viewport for scrolling on small phones
+- ✅ **Scrollbar Hiding**: Vertical scrollbar is hidden to prevent visual artifacts
+- ✅ **Conditional Layout**: Only layouts when advanced controls toggle is enabled
+- ✅ **State Persistence**: All slider values are saved and loaded properly
+- ✅ **Build Success**: Application compiles and builds successfully with new AdvancedPanel
+
+**Key Features Implemented**:
+- **Dedicated Component**: AdvancedPanel struct with its own resized() method for 3x4 grid layout
+- **Viewport Scrolling**: Only vertical scrolling enabled, horizontal scrollbar hidden
+- **Transparent Scrollbar**: Uses `juce::Colours::transparentBlack` for clean appearance
+- **12 Synth Parameters**: Detune, Osc Mix, Attack, Decay, Sustain, Release, Filter Cutoff, Resonance, Reverb Size, Reverb Damp, Reverb Wet, Reverb Dry
+- **Proper Focus Order**: All sliders have proper accessibility focus order (27+)
+- **Value Change Callbacks**: All sliders call updateAdvancedControls() when values change
+
+**Technical Implementation**:
+- **Component Structure**: `struct AdvancedPanel : juce::Component` with `std::array<std::unique_ptr<juce::Slider>, 12>` and `std::array<std::unique_ptr<juce::Label>, 12>`
+- **Grid Layout**: 3 columns, 4 rows with exact sizing: `(r.getWidth() - (cols - 1) * gap) / cols`
+- **Viewport Configuration**: `setScrollBarsShown(false, true)` for vertical-only scrolling
+- **Conditional Visibility**: `advancedVP.setVisible(advancedControlsToggle.getToggleState())`
+- **State Management**: All slider values saved/loaded through properties file
+- **Accessibility**: Proper focus order and accessible components
+
+**Result**: The Advanced Controls now have their own dedicated component with proper viewport scrolling, clean visual appearance, and no interference with the note grid layout. The panel only appears when the toggle is enabled and provides a clean, organized interface for all synthesizer parameters.
+
+## Previous Task: Chord Grid Layout Improvement - COMPLETED ✅
+
+**Task Description**: Implement improved chord grid layout with tight 2-4 columns and proper sizing for better visual consistency.
+
+**Requirements**:
+- Implement tight 2-4 column layout for chord buttons
+- Use proper grid tracks with fixed sizing instead of flexible sizing
+- Calculate exact button dimensions based on available space
+- Ensure comfortable tap targets (minimum 56px)
+- Use consistent gap spacing with note grid
+
+**Progress**:
+[X] Implement tight 2-4 column layout for chord buttons
+[X] Use proper grid tracks with fixed Px sizing
+[X] Calculate exact button dimensions based on available space
+[X] Ensure comfortable tap targets (minimum 56px)
+[X] Use consistent gap spacing with note grid
+[X] Test build and verify compilation success
+
+**Final Status**: 
+- ✅ **Tight Column Layout**: Implements 2-4 columns based on available width: `(chordArea.getWidth() + gap) / (chordMin + gap)`
+- ✅ **Fixed Grid Tracks**: Uses `juce::Grid::Px(chordW)` and `juce::Grid::Px(chordH)` for exact sizing
+- ✅ **Exact Button Dimensions**: Calculates precise width and height: `(chordArea.getWidth() - (chordCols - 1) * gap) / chordCols`
+- ✅ **Comfortable Tap Targets**: Ensures minimum 56px tap targets with `juce::jmax(chordMin, ...)`
+- ✅ **Consistent Spacing**: Uses same gap spacing as note grid for visual consistency
+- ✅ **Build Success**: Application compiles and builds successfully with improved chord grid
+
+**Key Features Implemented**:
+- **Dynamic Column Count**: Chooses optimal columns (2-4) based on available width
+- **Exact Sizing**: Calculates precise button dimensions that fit perfectly in available space
+- **Aspect Ratio**: Uses 0.75 aspect ratio (width * 0.75) for consistent button proportions
+- **Proper Grid Layout**: Uses fixed track sizing to prevent spacing issues
+- **Responsive Height**: Calculates exact height needed: `chordRows * chordH + (chordRows - 1) * gap`
+
+**Technical Implementation**:
+- **Column Calculation**: `int chordCols = juce::jlimit(2, 4, (chordArea.getWidth() + gap) / (chordMin + gap))`
+- **Button Sizing**: `int chordW = juce::jmax(chordMin, (chordArea.getWidth() - (chordCols - 1) * gap) / chordCols)`
+- **Height Calculation**: `int chordH = juce::jmax(chordMin, roundToInt(chordW * 0.75f))`
+- **Grid Configuration**: Uses `juce::Grid::AlignContent::center` and `juce::Grid::JustifyContent::center`
+- **Fixed Tracks**: Creates exact column/row tracks with `juce::Grid::TrackInfo(juce::Grid::Px(...))`
+
+**Result**: The chord grid now displays with tight, consistent spacing and proper button sizing that adapts to different screen widths while maintaining comfortable tap targets and visual consistency with the note grid.
+
+## Previous Task: Safe-Area Padding Implementation - COMPLETED ✅
+
+**Task Description**: Implement safe-area padding to fix the "Release All" pill that's hugging the notch on iOS devices with notches and rounded corners.
+
+**Requirements**:
+- Apply safe-area padding to prevent UI elements from being hidden behind notches
+- Use JUCE 8 compatible API for safe-area insets
+- Ensure both paint() and resized() methods respect safe areas
+- Maintain existing layout functionality while adding safe-area support
+
+**Progress**:
+[X] Analyze current layout system and identify safe-area requirements
+[X] Research JUCE 8 safe-area API and correct usage patterns
+[X] Implement safe-area padding in paint() method for card background
+[X] Implement safe-area padding in resized() method for component layout
+[X] Fix API compatibility issues with JUCE 8 BorderSize and Rectangle methods
+[X] Test build and verify compilation success
+
+**Final Status**: 
+- ✅ **Safe-Area Padding Complete**: Both paint() and resized() methods now respect safe-area insets
+- ✅ **JUCE 8 Compatibility**: Uses correct `getPrimaryDisplay()->safeAreaInsets` API
+- ✅ **Proper Rectangle API**: Uses `withTrimmedTop/Bottom/Left/Right()` methods for safe-area application
+- ✅ **Build Success**: Application compiles and builds successfully with safe-area support
+- ✅ **Layout Preservation**: All existing layout functionality maintained while adding safe-area support
+
+**Key Features Implemented**:
+- **Safe-Area Detection**: Uses `juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->safeAreaInsets`
+- **Paint Method**: Card background respects safe-area insets to avoid notch overlap
+- **Resized Method**: All component layout respects safe-area insets for proper positioning
+- **API Compatibility**: Fixed JUCE 8 BorderSize access using `getTop()`, `getBottom()`, `getLeft()`, `getRight()` methods
+- **Rectangle Operations**: Uses proper `withTrimmed*()` methods instead of deprecated `reduced()` with 4 parameters
+
+**Technical Implementation**:
+- **Safe-Area Access**: `auto sa = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->safeAreaInsets;`
+- **Rectangle Trimming**: `bounds.withTrimmedTop(sa.getTop()).withTrimmedBottom(sa.getBottom()).withTrimmedLeft(sa.getLeft()).withTrimmedRight(sa.getRight())`
+- **Dual Application**: Applied in both `paint()` and `resized()` methods for complete coverage
+- **Additional Margins**: Maintains existing 12px and 16px margins on top of safe-area padding
+
+**Result**: The "Release All" button and all other UI elements now properly respect safe-area insets, preventing them from being hidden behind notches or rounded corners on modern iOS devices.
+
+## Previous Task: iOS Simulator Audio Route Issue - PARTIALLY RESOLVED ⚠️
+
+**Task Description**: Address the classic "iOS Simulator has no valid audio route" issue that causes JUCE to report 0 Hz sample rate and fail AudioQueue creation, leading to app crashes.
+
+**Requirements**:
+- Fix iOS Simulator audio route configuration
+- Implement robust JUCE audio initialization with fallback handling
+- Provide user-friendly error messages and recovery instructions
+- Ensure app continues to work gracefully when audio setup fails
+
+**Progress**:
+[X] Implement AVAudioSession setup before device opening (iOS best practice)
+[X] Add fallback sample rate handling in prepareToPlay method
+[X] Convert MainComponent.cpp to MainComponent.mm for Objective-C++ support
+[X] Update Xcode project to recognize .mm files as Objective-C++
+[X] Build successfully with only warnings (no compilation errors)
+[X] Test app launch in iOS Simulator
 
 **Current Status**: 
-- ✅ **macOS**: Fully working (Tone Generator.app)
-- ✅ **Android**: Fixed and working (libToneGenerator.so built successfully)
-- ⚠️ **iOS**: Needs Projucer project creation
+- ✅ **Build Success**: App compiles and builds successfully for iOS Simulator
+- ✅ **AVAudioSession Setup**: Configures iOS audio session before device opening
+- ✅ **Fallback Handling**: Implements 44100 Hz fallback in prepareToPlay method
+- ✅ **App Launch**: App launches successfully in iOS Simulator without crashes
+- ⚠️ **AudioQueue Issue**: AudioQueue still reports 0 Hz despite AVAudioSession configuration
+- ⚠️ **Audio Functionality**: Audio system not fully functional due to persistent 0 Hz issue
+
+**Key Findings**:
+- **AVAudioSession Working**: Logs show "AVAudioSession configured successfully - Sample Rate: 44100 Hz"
+- **Audio System Partially Working**: Logs show "output client: 2 ch, 44100 Hz, Float32, deinterleaved"
+- **AudioQueue Still Failing**: Persistent "AudioQueueObject: Invalid format (2 ch, 0 Hz, lpcm...)" errors
+- **Hardware Conversion**: System converts 44100 Hz to 48000 Hz for hardware output
+- **No App Crashes**: App no longer crashes, runs gracefully with warning dialogs
+
+**Technical Implementation**:
+- **AVAudioSession Configuration**: Sets up iOS audio session with `setCategory:AVAudioSessionCategoryPlayback`, `setPreferredSampleRate:44100`, and `setActive:YES`
+- **Fallback Sample Rate**: Uses 44100 Hz fallback in `prepareToPlay()` when sample rate is 0 Hz
+- **Objective-C++ Support**: Renamed `MainComponent.cpp` to `MainComponent.mm` and updated Xcode project
+- **Graceful Error Handling**: Shows warning dialogs instead of crashing
+- **Debug Logging**: Comprehensive console output for troubleshooting
+
+**Remaining Issues**:
+- **AudioQueue 0 Hz**: Despite AVAudioSession working, AudioQueue still receives 0 Hz sample rate
+- **Audio Functionality**: App UI works but audio generation may not function properly
+- **Simulator Audio Route**: May need manual Simulator I/O configuration (I/O → Audio Output → select real device)
 
 **Next Steps**:
-1. Create .jucer project file for iOS using Projucer
-2. Generate Xcode project from .jucer file
-3. Test iOS build in Xcode
-4. Update final verification report
+1. **Manual Simulator Fix**: Guide user to fix Simulator audio route in I/O settings
+2. **Alternative Approach**: Consider different JUCE audio initialization strategy
+3. **Real Device Testing**: Test on actual iOS device where this issue rarely occurs
+4. **Further Investigation**: Research deeper JUCE AudioQueue initialization issues
 
-**Key Learnings**:
-- Android NDK version determines maximum supported API level
-- JUCE graphics module requires API 29+ for font features
-- Projucer is more reliable than CMake for iOS project generation
+**Result**: The app now builds successfully, launches without crashes, and provides graceful error handling. The core iOS Simulator audio route issue persists but is partially mitigated with fallback handling and user guidance.
+
+## Previous Task: Projucer Path Fix - COMPLETED ✅
+
+**Task Description**: Fix Projucer path configuration to resolve iOS build issues with missing JUCE module symbols. Following systematic steps to ensure proper module generation and linking.
+
+**Requirements**:
+- Close Xcode to prevent file conflicts during Projucer save
+- Clean up old generated code (Builds/iOS/, JuceLibraryCode/)
+- Verify Global Paths JUCE modules path in Projucer
+- Ensure all modules are enabled for iOS exporter
+- Regenerate project files and verify Compile Sources
+- Test build for both device and simulator
+
+**Progress**:
+[X] Close Xcode to prevent file conflicts
+[X] Clean up old generated code folders
+[X] Open .jucer in Projucer and verify Global Paths
+[X] Select iOS exporter and verify module settings
+[X] Save Project to regenerate files
+[X] Open regenerated iOS project in Xcode
+[X] Verify Compile Sources and test build
+[X] Add missing source files to .jucer project
+[X] Save Project again to include new source files
+[X] Test final build with all source files
+
+**Final Status**: 
+- ✅ **Projucer Path Fix Complete**: All JUCE modules now properly linked and compiling
+- ✅ **JUCE Module Generation**: All `include_juce_*.mm` files generated and included in Compile Sources
+- ✅ **Build Success**: JUCE modules compile successfully without "LookAndFeel_V2 thunk" errors
+- ✅ **iOS Project Structure**: Proper Xcode project with all necessary JUCE module files
+- ✅ **Module Linking**: All required JUCE modules (audio, graphics, GUI, etc.) properly linked
+
+**Key Success Indicators**:
+- All `include_juce_*.mm` files compile successfully (visible in build output)
+- No more "LookAndFeel_V2 thunk" errors that were mentioned in original issue
+- Proper module amalgamation files generated in `JuceLibraryCode/`
+- iOS Xcode project properly configured with all JUCE modules
+- Build progresses to linking stage (undefined symbols are from missing source files, not JUCE modules)
+
+**Common Issues to Address**:
+- Wrong JUCE modules path in Global Paths
+- Modules added to wrong exporter (not iOS)
+- Missing include_juce_*.mm files in Compile Sources
+- Spaces in project name causing path issues
+- Manual edits to generated files being overwritten
+
+## Previous Task: Theme System Implementation - COMPLETED ✅
+
+**Task Description**: Implement a comprehensive theme system for the tone generator app using the provided theme specification. The theme should provide consistent colors, typography, and metrics throughout the application.
+
+**Requirements**:
+- Create a Theme namespace with colors, metrics, and typography functions
+- Integrate the theme system into the existing ModernLookAndFeel class
+- Update all UI components to use the new theme system
+- Ensure responsive design compatibility with the theme
+- Maintain visual consistency across all components
+
+**Progress**:
+[X] Create Theme.h header file with the provided theme specification
+[X] Integrate theme system into ModernLookAndFeel class
+[X] Update MainComponent to use theme colors and typography
+[X] Update all UI components to use theme metrics and colors
+[X] Test theme integration with responsive design
+[X] Verify visual consistency across all screen sizes
+
+**Theme Specification**:
+- **Colors**: Dark theme with near-black background, card elements, mint-teal accent
+- **Typography**: Title (26px bold), readout (44px), label (14px), button (16px bold)
+- **Metrics**: Corner radius (12px), grid gap (12px), play height (56px), segment height (40px)
+
+**Final Status**: 
+- ✅ **Theme System Complete**: Comprehensive theme system implemented with all specified colors, typography, and metrics
+- ✅ **ModernLookAndFeel Integration**: Updated to use theme colors and metrics throughout
+- ✅ **UI Component Updates**: All buttons, labels, sliders, and other components now use theme system
+- ✅ **Responsive Design Compatibility**: Theme works seamlessly with existing responsive design system
+- ✅ **Visual Consistency**: Consistent dark theme with mint-teal accent across all UI elements
+- ✅ **Build Success**: Application compiles and runs successfully with new theme system
+
+**Key Features Implemented**:
+- **Theme.h Header**: Complete theme specification with colors, metrics, and typography functions
+- **Color System**: Dark theme with near-black background (#111214), card elements (#1B1D20), mint-teal accent (#2ED1A2)
+- **Typography System**: Responsive font scaling with title (26px), readout (44px), label (14px), button (16px)
+- **Metrics System**: Consistent corner radius (12px), grid gaps (12px), and component heights
+- **Enhanced UI States**: Additional colors for hover, pressed, active, and status states
+- **Note Button States**: Three distinct visual states (off, selected, playing) with theme colors
+- **Status Colors**: Playing (mint-teal), stopped (dimmed), error (red), warning (yellow)
+
+**Technical Implementation**:
+- Created Theme namespace with static const colors for JUCE compatibility
+- Updated ModernLookAndFeel to use theme colors and corner radius
+- Enhanced all UI components with theme-based styling
+- Integrated theme metrics into responsive layout system
+- Maintained backward compatibility with existing functionality
+- Used deprecated Font constructor for JUCE 8.0.10 compatibility (warnings only)
+
+**Result**: The tone generator now has a cohesive, modern dark theme with mint-teal accents that provides excellent visual hierarchy and user experience across all screen sizes.
+
+## LookAndFeelMinimal Integration - COMPLETED ✅
+
+**Task Description**: Integrate the new LookAndFeelMinimal class for a cleaner, more minimal design approach.
+
+**Implementation**:
+- ✅ **LookAndFeelMinimal.h**: Created new minimal LookAndFeel class with flat, rounded design
+- ✅ **Replaced ModernLookAndFeel**: Switched from the previous custom LookAndFeel to the new minimal version
+- ✅ **Theme Integration**: LookAndFeelMinimal uses the existing Theme system for consistent styling
+- ✅ **Build Success**: Application compiles and runs successfully with the new minimal design
+
+**Key Features of LookAndFeelMinimal**:
+- **Flat Design**: Clean, flat buttons with rounded corners using Theme::corner
+- **Segmented Control Style**: Pressed buttons show inner glow effect with Theme::bg text
+- **Linear Sliders**: Flat linear sliders with Theme::knobTrack and Theme::knobFill colors
+- **Minimal Labels**: Transparent background labels with Theme::text color
+- **Consistent Theming**: All elements use the Theme namespace for colors and metrics
+
+**Visual Improvements**:
+- **Cleaner Buttons**: Flat design with subtle borders and proper toggle states
+- **Better Typography**: Uses Theme::button() font for consistent text styling
+- **Enhanced Sliders**: Linear sliders with theme colors and proper positioning
+- **Minimal Aesthetics**: Reduced visual clutter while maintaining functionality
+
+**Technical Implementation**:
+- Created LookAndFeelMinimal struct inheriting from juce::LookAndFeel_V4
+- Implemented custom draw methods for buttons, sliders, and labels
+- Integrated with existing Theme system for color consistency
+- Replaced ModernLookAndFeel with LookAndFeelMinimal in MainComponent
+- Maintained all existing functionality while improving visual design
+
+**Final Result**: The tone generator now features a clean, minimal design that's both modern and functional, with excellent visual hierarchy and consistent theming throughout the application.
+
+## Swipe Gestures and Grid Layout Integration - COMPLETED ✅
+
+**Task Description**: Integrate swipe gesture functionality for frequency control and implement Grid layout system to prevent UI overlap and improve organization.
+
+**Implementation**:
+- ✅ **Swipe Gestures**: Added mouseDown/mouseDrag handlers for frequency control (±1 Hz vertical, ±10 Hz horizontal)
+- ✅ **Grid Layout System**: Replaced FlexBox with JUCE Grid for better component organization
+- ✅ **Frequency Display**: Added frequency readout display with real-time updates
+- ✅ **Waveform Control**: Added segmented control for Sine, Square, Triangle, Saw waveforms
+- ✅ **Volume Controls**: Added Master/Left/Right volume sliders with proper theming
+- ✅ **Build Success**: Application compiles and runs successfully with all new features
+
+**Key Features Implemented**:
+- **Swipe Gesture Control**: 
+  - Horizontal swipes: ±10 Hz per 16px step for coarse frequency adjustment
+  - Vertical swipes: ±1 Hz per 12px step for fine frequency adjustment
+  - Real-time frequency display updates during swiping
+- **Grid Layout System**:
+  - Replaced complex FlexBox layouts with cleaner JUCE Grid system
+  - Prevents UI overlap and provides better component organization
+  - Responsive grid sizing based on screen dimensions
+- **Frequency Control**:
+  - Large frequency readout display (440.0 Hz format)
+  - Swipe instruction label ("Swipe LR: ±10 Hz • UD: ±1 Hz")
+  - Frequency limits (20Hz - 22000Hz) with proper clamping
+- **Waveform Selection**:
+  - Segmented control buttons for Sine, Square, Triangle, Saw
+  - Toggle behavior with proper visual feedback
+  - Theme-based styling with pressed/selected states
+- **Volume Controls**:
+  - Three vertical sliders: Master, Left, Right
+  - Linear slider style with theme colors
+  - Proper volume label and responsive sizing
+
+**Technical Implementation**:
+- Added mouseDown/mouseDrag event handlers for swipe detection
+- Implemented setFrequency() and setWave() methods for audio control
+- Created setupFrequencyControls(), setupWaveformControls(), setupVolumeControls() methods
+- Replaced FlexBox layouts with JUCE Grid for better organization
+- Fixed compilation errors with proper Grid::Px() usage and type conversions
+- Maintained existing audio functionality while adding new features
+
+**Visual Improvements**:
+- **Card-based Layout**: Center content area with rounded card background
+- **Better Organization**: Grid system prevents component overlap
+- **Responsive Design**: All new components scale properly with screen size
+- **Consistent Theming**: All new elements use the existing Theme system
+- **Clean Typography**: Frequency readout uses Theme::readout() font
+
+**Audio Integration**:
+- Frequency control system ready for synthesizer integration
+- Waveform selection system ready for oscillator shape changes
+- Volume control system ready for gain adjustments
+- TODO comments indicate where audio engine calls should be added
+
+**Final Result**: The tone generator now features intuitive swipe gesture controls for frequency adjustment, a clean Grid-based layout system, and comprehensive waveform and volume controls, all while maintaining the existing minimal design aesthetic and responsive functionality.
+
+## Previous Task: Constructor Setup Verification - COMPLETED ✅
+
+**Task Description**: Verify that the MainComponent constructor properly sets up all required components including title, status, chord buttons, play button, and note toggles with proper `addAndMakeVisible()` calls and button text configuration.
+
+**Requirements**:
+- Ensure constructor creates all components (title, status, chord buttons, play button, note toggles)
+- Verify `addAndMakeVisible()` calls for all components
+- Check that button texts are properly set
+- Confirm `setClickingTogglesState(true)` for toggle buttons
+- Verify proper initial window size setting
+
+**Progress**:
+[X] Analyze current MainComponent constructor implementation
+[X] Verify all required components are already implemented
+[X] Check that all components use `addAndMakeVisible()` properly
+[X] Confirm button text configuration and toggle state setup
+[X] Verify responsive design integration
+
+**Final Status**: 
+- ✅ **Constructor Already Complete**: All required components are already properly implemented
+- ✅ **Component Setup**: All components use `addAndMakeVisible()` correctly
+- ✅ **Button Configuration**: All buttons have proper text and toggle state setup
+- ✅ **Responsive Design**: Constructor integrates with responsive design system
+- ✅ **Modern UI**: Uses custom ModernLookAndFeel with proper styling
+
+**Key Components Verified**:
+- **Title**: Drawn in `paint()` method with responsive typography (24-40px)
+- **Status Labels**: `chordDisplayLabel`, `playbackStatusLabel`, `activeNotesLabel` with proper styling
+- **Chord Buttons**: `cMajorButton`, `cMinorButton`, `cSus2Button`, `cSus4Button` with toggle behavior
+- **Play Button**: `playStopButton` with proper toggle functionality
+- **Note Buttons**: 12 note toggle buttons with `setClickingTogglesState(true)`
+- **Advanced Controls**: Toggle button and responsive slider system
+
+**Technical Implementation**:
+- Constructor calls setup methods: `setupFlexBoxLayout()`, `setupNoteButtons()`, `setupChordButtons()`, etc.
+- All components use `addAndMakeVisible()` for proper visibility
+- Modern styling with custom `ModernLookAndFeel` class
+- Responsive design integration with dynamic sizing
+- Proper audio channel initialization with `setAudioChannels(0, 2)`
+
+**Conclusion**: The constructor is already fully implemented with all required components and follows best practices. No changes needed.
+
+## Previous Task: Responsive Design Implementation - COMPLETED ✅
+
+**Task Description**: Implement responsive design for the tone generator app to handle different screen sizes and orientations. The UI should scale appropriately for small phones vs tablets and handle orientation changes gracefully.
+
+**Requirements**:
+- Dynamic button sizing based on available width (width/6 - margin for 6 per row)
+- Enhanced FlexBox layout to handle different screen sizes and orientations
+- Responsive breakpoint logic for small phones vs tablets
+- Test UI on various device simulators (small phone vs tablet)
+- Make advanced controls responsive with proper wrapping and sizing
+
+**Progress**:
+[X] Analyze current layout system and identify responsive design requirements
+[X] Implement dynamic button sizing based on available width (width/6 - margin for 6 per row)
+[X] Enhance FlexBox layout to handle different screen sizes and orientations
+[X] Add responsive breakpoint logic for small phones vs tablets
+[X] Test UI on various device simulators (small phone vs tablet)
+[X] Make advanced controls responsive with proper wrapping and sizing
+[X] Fix infinite recursion crash in layout system
+
+**Final Status**: 
+- ✅ **Dynamic Button Sizing**: Buttons scale from 45-100px based on available width
+- ✅ **Responsive Breakpoints**: 5 breakpoints (320px, 480px, 600px, 768px, 1024px) for different device sizes
+- ✅ **FlexBox Layout**: Enhanced with responsive margins and dynamic row/column calculations
+- ✅ **Button Grid Adaptation**: 4 buttons per row for small phones, 5 for medium, 6 for larger screens
+- ✅ **Typography Scaling**: Font sizes adjust based on screen size and orientation
+- ✅ **Advanced Controls**: Responsive slider sizing and wrapping for different screen sizes
+- ✅ **Crash Fix**: Resolved infinite recursion between `resized()` and `updateResponsiveLayout()`
+
+**Key Features Implemented**:
+- **Responsive Breakpoints**: 
+  - Small phones (< 480px): 4 buttons per row, compact margins
+  - Medium phones (480-600px): 5 buttons per row, medium margins
+  - Large phones/small tablets (600-768px): 6 buttons per row, larger margins
+  - Tablets (768px+): 6 buttons per row, full margins
+- **Dynamic Sizing**: 
+  - Buttons: 45-100px based on available width
+  - Chord buttons: 100-150px width, proportional height
+  - Control buttons: 120-200px width, proportional height
+  - Advanced sliders: 100-150px based on available width
+- **Typography Scaling**: 
+  - Title: 24-40px based on screen size and orientation
+  - Labels: 14-24px with proportional scaling
+  - Responsive margins: 4-10px based on screen size
+- **Layout Adaptation**: 
+  - Dynamic row/column calculations
+  - Responsive margins throughout
+  - Orientation-aware sizing
+  - Graceful wrapping for advanced controls
+
+**Technical Implementation**:
+- Added responsive helper methods: `calculateButtonSize()`, `calculateButtonsPerRow()`, `isTabletSize()`, etc.
+- Implemented breakpoint system with 5 distinct size categories
+- Enhanced FlexBox layouts with responsive margins and sizing
+- Fixed critical recursion bug in layout system
+- Maintained consistent visual hierarchy across all screen sizes
+
+**Critical Bug Fix**:
+- **Issue**: Infinite recursion between `MainComponent::resized()` and `MainComponent::updateResponsiveLayout()` causing stack overflow
+- **Root Cause**: `updateResponsiveLayout()` was calling `resized()` at the end, but `resized()` was calling `updateResponsiveLayout()` at the beginning
+- **Solution**: Removed the recursive call and let JUCE's natural layout system handle resize events
+- **Result**: Application now launches and runs without crashes, responsive design works correctly
+
+## Previous Task: UI Feedback for Active Notes - COMPLETED ✅
+
+**Task Description**: Enhance UI feedback to clearly show which notes are actively sounding. The note buttons should reflect the current playback state, and we should add additional visual indicators for better user experience.
+
+**Requirements**:
+- Note buttons should clearly show which notes are currently sounding
+- Add visual indication of overall playback state
+- Consider adding a label showing currently playing chord (e.g., "Currently playing: C major")
+- Allow note selection changes during playback (on-the-fly chord modification)
+- Ensure UI consistency across all feedback mechanisms
+- Consider disabling note selection vs allowing changes during playback
+
+**Progress**:
+[X] Analyze current UI feedback implementation and identify areas for enhancement
+[X] Enhance note button visual feedback to clearly show which notes are actively sounding
+[X] Add clear visual indication of overall playback state and currently playing notes
+[X] Implement a label showing currently playing chord (e.g., 'Currently playing: C major')
+[X] Consider and implement note selection behavior during playback (allow on-the-fly changes)
+[X] Review and ensure UI consistency across all feedback mechanisms
+
+**Final Status**: 
+- ✅ **Enhanced Note Button Feedback**: Three distinct visual states - dark grey (off), light blue (selected), lime (actively playing)
+- ✅ **Chord Display Label**: Shows "Selected: [chord]" when stopped, "Currently playing: [chord]" when playing
+- ✅ **Playback Status Label**: Clear "Stopped" / "Playing" indication
+- ✅ **Active Notes Label**: Shows "Playing: [note names]" when notes are actively sounding
+- ✅ **Smart Auto-Play**: Notes automatically start playing when selected, stop when all notes deselected
+- ✅ **On-the-fly Changes**: Users can add/remove notes during playback seamlessly
+- ✅ **Chord Recognition**: Basic major/minor chord detection with fallback to note names
+
+**Key Features Implemented**:
+- **Three-State Note Buttons**: 
+  - Dark grey: Not selected
+  - Light blue: Selected but not playing
+  - Lime with glow: Actively playing
+- **Dynamic Chord Display**: 
+  - Shows chord name when available (C Major, D Minor, etc.)
+  - Falls back to note names for custom combinations
+  - Updates in real-time as notes are added/removed
+- **Smart Playback Control**: 
+  - Auto-starts when first note is selected
+  - Auto-stops when all notes are deselected
+  - Manual Play/Stop button for explicit control
+- **Real-time Feedback**: 
+  - All UI elements update immediately when notes change
+  - Visual consistency across all feedback mechanisms
+- **Intuitive Behavior**: 
+  - Note selection works both when stopped and playing
+  - Clear visual distinction between selected and playing states
+  - Smooth transitions between states
+
+**Technical Implementation**:
+- Added `chordDisplayLabel`, `playbackStatusLabel`, and `activeNotesLabel` components
+- Implemented `updateChordDisplay()`, `updateNoteButtonVisualFeedback()`, and `updateActiveNotesDisplay()` methods
+- Enhanced `onNoteButtonClicked()` with auto-play/stop logic
+- Added basic chord recognition algorithm for major/minor chords
+- Updated all UI feedback calls throughout the application
+- Maintained consistent color scheme and visual hierarchy
+
+## Previous Task: Play/Stop Control Implementation - COMPLETED ✅
+
+**Final Status**: 
+- ✅ **Play/Stop Toggle**: Single button that toggles between "Play" and "Stop" states
+- ✅ **Note Iteration**: When Play is pressed, iterates through all note toggles and starts selected notes
+- ✅ **Graceful Stop**: Uses `allNotesOff(1, true)` for graceful note release with envelope tail-off
+- ✅ **Visual Feedback**: Button changes color (green for Play, red for Stop) and text
+- ✅ **No Notes Handling**: If no notes are selected, Play button remains in "Play" state
+- ✅ **Consistent API**: All stop methods now use `allNotesOff()` for consistency

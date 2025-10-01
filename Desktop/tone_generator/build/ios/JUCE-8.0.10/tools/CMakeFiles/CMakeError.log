@@ -31,8 +31,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 32addaa5a3e212880499df860702a458
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/32addaa5a3e212880499df860702a458.xcbuilddata
+Build description signature: 550ba4d2f5f9991c3676c3ad4f572b76
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/550ba4d2f5f9991c3676c3ad4f572b76.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdC' from project 'CompilerIdC')
@@ -73,8 +73,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 32addaa5a3e212880499df860702a458
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/32addaa5a3e212880499df860702a458.xcbuilddata
+Build description signature: 550ba4d2f5f9991c3676c3ad4f572b76
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/550ba4d2f5f9991c3676c3ad4f572b76.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdC' from project 'CompilerIdC')
@@ -117,8 +117,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 6d762edcdf825b6eb7b6388a2a6cb5c1
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/6d762edcdf825b6eb7b6388a2a6cb5c1.xcbuilddata
+Build description signature: 5d99a36aae4fee28abbb427c16a6f222
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/5d99a36aae4fee28abbb427c16a6f222.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
@@ -161,8 +161,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 6d762edcdf825b6eb7b6388a2a6cb5c1
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/6d762edcdf825b6eb7b6388a2a6cb5c1.xcbuilddata
+Build description signature: 5d99a36aae4fee28abbb427c16a6f222
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/5d99a36aae4fee28abbb427c16a6f222.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
@@ -203,8 +203,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 2cb871d9f70d84884cc535f0b83dbcf2
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/2cb871d9f70d84884cc535f0b83dbcf2.xcbuilddata
+Build description signature: 010bca5329d32b033b6e309cd59f0a5c
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/010bca5329d32b033b6e309cd59f0a5c.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdC' from project 'CompilerIdC')
@@ -245,8 +245,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 2cb871d9f70d84884cc535f0b83dbcf2
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/2cb871d9f70d84884cc535f0b83dbcf2.xcbuilddata
+Build description signature: 010bca5329d32b033b6e309cd59f0a5c
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdC/./XCBuildData/010bca5329d32b033b6e309cd59f0a5c.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdC' from project 'CompilerIdC')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdC' from project 'CompilerIdC')
@@ -289,8 +289,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 4bc555b3b12ac33f2c27bac0aca1b3e7
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/4bc555b3b12ac33f2c27bac0aca1b3e7.xcbuilddata
+Build description signature: fa6d044dee3f72545ca0a82da4c7fb25
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/fa6d044dee3f72545ca0a82da4c7fb25.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
@@ -333,8 +333,8 @@ ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeD
 
 ExecuteExternalTool /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
 
-Build description signature: 4bc555b3b12ac33f2c27bac0aca1b3e7
-Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/4bc555b3b12ac33f2c27bac0aca1b3e7.xcbuilddata
+Build description signature: fa6d044dee3f72545ca0a82da4c7fb25
+Build description path: /Users/magnusnorregaardandersen/Desktop/tone_generator/build/ios/JUCE-8.0.10/tools/CMakeFiles/3.22.1-g37088a8/CompilerIdCXX/./XCBuildData/fa6d044dee3f72545ca0a82da4c7fb25.xcbuilddata
 error: An empty code signing identity is not valid when signing a binary for the 'Command-line Tool' product type. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Traditional headermap style is no longer supported; please migrate to using separate headermaps and set 'ALWAYS_SEARCH_USER_PATHS' to NO. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
 warning: Run script build phase 'Run Script' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'CompilerIdCXX' from project 'CompilerIdCXX')
