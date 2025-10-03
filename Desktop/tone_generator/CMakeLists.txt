@@ -29,10 +29,20 @@ juce_generate_juce_header(ToneGenerator)
 target_sources(ToneGenerator PRIVATE
     Source/Main.cpp
     Source/MainComponent.mm
-    Source/ToneGenerator.cpp
-    Source/PadVoice.cpp
-    Source/PadSound.cpp
-    Source/PadSynthesizer.cpp
+    Source/Synth.cpp
+    Source/PluginProcessor.cpp
+    Source/PluginEditor.cpp
+    Source/CustomLookAndFeel.cpp
+    Source/WrattDelay.cpp
+    # STK library files
+    Source/STK/Stk.cpp
+    Source/STK/SineWave.cpp
+    Source/STK/BlitSquare.cpp
+    Source/STK/BlitSaw.cpp
+    Source/STK/Noise.cpp
+    Source/STK/ADSR.cpp
+    Source/STK/FreeVerb.cpp
+    Source/STK/Chorus.cpp
 )
 
 # Link JUCE modules

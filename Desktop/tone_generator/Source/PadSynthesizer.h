@@ -22,6 +22,19 @@ public:
     void setFilterCutoff(float cutoff);
     void setFilterResonance(float resonance);
     
+    // Filter envelope controls
+    void setFilterEnvelopeAmount(float amount);
+    void setFilterEnvelopeAttack(float attack);
+    void setFilterEnvelopeDecay(float decay);
+    void setFilterEnvelopeSustain(float sustain);
+    void setFilterEnvelopeRelease(float release);
+    
+    // LFO controls
+    void setFilterLFODepth(float depth);
+    void setFilterLFORate(float rate);
+    void setPitchLFODepth(float depth);
+    void setPitchLFORate(float rate);
+    
     // Note triggering
     void triggerNote(int midiNoteNumber, float velocity = 1.0f);
     void releaseNote(int midiNoteNumber);

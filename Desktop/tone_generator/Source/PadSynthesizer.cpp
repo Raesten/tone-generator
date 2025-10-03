@@ -10,8 +10,14 @@ void PadSynthesizer::prepare(double sampleRate, int samplesPerBlock)
 {
     setCurrentPlaybackSampleRate(sampleRate);
     
-    // Prepare all voices - JUCE voices don't have prepareToPlay, they use the sample rate from the synthesizer
-    juce::ignoreUnused(samplesPerBlock);
+    // Prepare all voices with the correct sample rate and block size
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->prepare(sampleRate, samplesPerBlock);
+        }
+    }
 }
 
 // Note: We now use JUCE's built-in Synthesiser::renderNextBlock method
@@ -101,6 +107,107 @@ void PadSynthesizer::setFilterResonance(float resonance)
         if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
         {
             voice->setFilterResonance(resonance);
+        }
+    }
+}
+
+// Filter envelope controls
+void PadSynthesizer::setFilterEnvelopeAmount(float amount)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterEnvelopeAmount(amount);
+        }
+    }
+}
+
+void PadSynthesizer::setFilterEnvelopeAttack(float attack)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterEnvelopeAttack(attack);
+        }
+    }
+}
+
+void PadSynthesizer::setFilterEnvelopeDecay(float decay)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterEnvelopeDecay(decay);
+        }
+    }
+}
+
+void PadSynthesizer::setFilterEnvelopeSustain(float sustain)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterEnvelopeSustain(sustain);
+        }
+    }
+}
+
+void PadSynthesizer::setFilterEnvelopeRelease(float release)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterEnvelopeRelease(release);
+        }
+    }
+}
+
+// LFO controls
+void PadSynthesizer::setFilterLFODepth(float depth)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterLFODepth(depth);
+        }
+    }
+}
+
+void PadSynthesizer::setFilterLFORate(float rate)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setFilterLFORate(rate);
+        }
+    }
+}
+
+void PadSynthesizer::setPitchLFODepth(float depth)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setPitchLFODepth(depth);
+        }
+    }
+}
+
+void PadSynthesizer::setPitchLFORate(float rate)
+{
+    for (int i = 0; i < getNumVoices(); ++i)
+    {
+        if (auto* voice = dynamic_cast<PadVoice*>(getVoice(i)))
+        {
+            voice->setPitchLFORate(rate);
         }
     }
 }

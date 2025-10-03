@@ -1,0 +1,121 @@
+# JUCE Audio Effects Diagnostic Report
+
+## Problem Summary
+The tone generator app has a lush multi-oscillator synthesizer that generates audio correctly, but the auxiliary send/return effects (reverb and chorus) are not processing audio despite being properly configured.
+
+## Current Architecture
+- **Main Signal Path**: Dry signal goes directly to master output (preserved)
+- **Effects Bus**: Copy of signal goes to reverb + chorus processing
+- **Effects Return**: Processed effects get mixed back with dry signal (80% return)
+
+## Debug Logs Analysis
+```
+MAIN AUDIO: After synth render - RMS: 0.0318482 (Active voices: 3) ✅
+MAIN AUDIO: Effects buffer BEFORE processing - RMS: 0.0336561 ✅
+MAIN AUDIO: Effects buffer AFTER reverb - RMS: 0 ❌
+MAIN AUDIO: Effects buffer RMS: 0 ❌
+MAIN AUDIO: After effects mixing - RMS: 0.0336561 ✅
+MAIN AUDIO: FINAL OUTPUT - RMS: 0.0336561 ✅
+```
+
+## Key Findings
+1. **Synth Audio Generation**: ✅ Working (RMS: 0.0318482)
+2. **Audio Copy to Effects Buffer**: ✅ Working (RMS: 0.0336561)
+3. **Reverb Processing**: ❌ FAILING (RMS drops to 0 after reverb.process())
+4. **Chorus Processing**: ❌ FAILING (gets 0 input from reverb)
+5. **Final Audio Output**: ✅ Working (dry signal preserved)
+
+## Current Effect Parameters
+### Reverb Settings:
+- Room Size: 0.8 (large room for lush depth)
+- Damping: 0.3 (low damping for lushness)
+- Wet Level: 0.7 (70% wet on effects bus)
+- Dry Level: 0.3 (30% dry on effects bus)
+- Width: 1.0 (full stereo width)
+- Freeze Mode: 0.0 (normal mode)
+
+### Chorus Settings:
+- Rate: 0.15 (slower rate for lush movement)
+- Depth: 0.4 (deeper modulation for richness)
+- Centre Delay: 0.012 (slightly longer delay for depth)
+- Feedback: 0.1 (light feedback for warmth)
+- Mix: 0.6 (60% wet on effects bus)
+
+## Code Implementation
+```cpp
+// Create effects buffer and copy audio
+juce::AudioBuffer<float> effectsBuffer(bufferToFill.buffer->getNumChannels(), bufferToFill.numSamples);
+effectsBuffer.clear();
+
+// Copy dry signal to effects buffer
+for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch) {
+    effectsBuffer.copyFrom(ch, 0, *bufferToFill.buffer, ch, bufferToFill.startSample, bufferToFill.numSamples);
+}
+
+// Process effects on the copy
+juce::dsp::AudioBlock<float> effectsBlock(effectsBuffer);
+juce::dsp::ProcessContextReplacing<float> effectsContext(effectsBlock);
+
+// Process reverb on effects buffer
+reverb.process(effectsContext);  // ← This is where audio gets silenced
+
+// Process chorus on effects buffer
+chorus.process(effectsContext);
+
+// Mix effects back with dry signal (auxiliary return)
+const float effectsReturn = 0.8f; // 80% return from effects
+for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch) {
+    for (int i = 0; i < bufferToFill.numSamples; ++i) {
+        float drySample = bufferToFill.buffer->getSample(ch, bufferToFill.startSample + i);
+        float wetSample = effectsBuffer.getSample(ch, i);
+        float mixedSample = drySample + (wetSample * effectsReturn);
+        bufferToFill.buffer->setSample(ch, bufferToFill.startSample + i, mixedSample);
+    }
+}
+```
+
+## Effect Initialization
+```cpp
+// Reverb setup
+reverb.reset();
+reverb.prepare(spec);
+reverb.setParameters(reverbParams);
+
+// Chorus setup
+chorus.reset();
+chorus.prepare(spec);
+chorus.setRate(0.15f);
+chorus.setDepth(0.4f);
+chorus.setCentreDelay(0.012f);
+chorus.setFeedback(0.1f);
+chorus.setMix(0.6f);
+```
+
+## Technical Details
+- **JUCE Version**: 8.0.10
+- **Platform**: macOS (darwin 25.1.0)
+- **Audio Format**: 2 channels, 256 samples per block
+- **Sample Rate**: 44100 Hz
+- **Effects**: juce::dsp::Reverb and juce::dsp::Chorus
+
+## Suspected Issues
+1. **Reverb Parameter Configuration**: The reverb might be configured incorrectly for auxiliary send/return
+2. **Effect Processing Context**: The ProcessContextReplacing might not be working as expected
+3. **Buffer Size Mismatch**: The effects might need different buffer preparation
+4. **Effect State**: The effects might need to be reset/prepared differently for each buffer
+
+## What Works
+- Multi-oscillator synthesizer generates rich, lush audio
+- Audio copying to effects buffer works correctly
+- Dry signal preservation works perfectly
+- Final audio output is audible
+
+## What Doesn't Work
+- Reverb completely silences the audio (RMS drops to 0)
+- Chorus receives no input due to reverb failure
+- No effects are audible in the final output
+
+## Request for Help
+The issue appears to be that `reverb.process(effectsContext)` is silencing the audio completely, despite the reverb parameters being set to 70% wet and 30% dry. The reverb should be processing the audio and adding lush spatial depth, but instead it's nulling the signal.
+
+Any suggestions for fixing the reverb processing in this auxiliary send/return setup would be greatly appreciated.

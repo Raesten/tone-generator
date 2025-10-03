@@ -2,7 +2,7 @@
 
 <JUCERPROJECT id="ToneGenerator" name="Tone Generator" projectType="guiapp"
               useAppConfig="0" addUsingNamespaceToJuceHeader="0" displaySplashScreen="1"
-              jucerFormatVersion="1" version="1.0.0" bundleIdentifier="com.yourcompany.tonegenerator"
+              jucerFormatVersion="1" version="1.0.0" bundleIdentifier="com.magnusandersen.tonegenerator"
               includeBinaryInAppConfig="1" includeBinaryInPluginConfig="1"
               pluginName="Tone Generator" pluginDesc="Tone Generator" pluginManufacturer="Your Company"
               pluginCode="Tone" pluginChannelConfigs="{1, 1}, {2, 2}" pluginIsSynth="0"
@@ -24,23 +24,50 @@
             file="Source/MainComponent.mm"/>
       <FILE id="MainComponent.h" name="MainComponent.h" compile="0" resource="0"
             file="Source/MainComponent.h"/>
-      <FILE id="ToneGenerator.cpp" name="ToneGenerator.cpp" compile="1" resource="0"
-            file="Source/ToneGenerator.cpp"/>
-      <FILE id="ToneGenerator.h" name="ToneGenerator.h" compile="0" resource="0"
-            file="Source/ToneGenerator.h"/>
       <FILE id="LookAndFeelMinimal.h" name="LookAndFeelMinimal.h" compile="0"
             resource="0" file="Source/LookAndFeelMinimal.h"/>
       <FILE id="Theme.h" name="Theme.h" compile="0" resource="0" file="Source/Theme.h"/>
-      <FILE id="PadSynthesizer.cpp" name="PadSynthesizer.cpp" compile="1"
-            resource="0" file="Source/PadSynthesizer.cpp"/>
-      <FILE id="PadSynthesizer.h" name="PadSynthesizer.h" compile="0" resource="0"
-            file="Source/PadSynthesizer.h"/>
-      <FILE id="PadVoice.cpp" name="PadVoice.cpp" compile="1" resource="0"
-            file="Source/PadVoice.cpp"/>
-      <FILE id="PadVoice.h" name="PadVoice.h" compile="0" resource="0" file="Source/PadVoice.h"/>
-      <FILE id="PadSound.cpp" name="PadSound.cpp" compile="1" resource="0"
-            file="Source/PadSound.cpp"/>
-      <FILE id="PadSound.h" name="PadSound.h" compile="0" resource="0" file="Source/PadSound.h"/>
+      <FILE id="Synth.cpp" name="Synth.cpp" compile="1" resource="0" file="Source/Synth.cpp"/>
+      <FILE id="Synth.h" name="Synth.h" compile="0" resource="0" file="Source/Synth.h"/>
+      <FILE id="PluginProcessor.cpp" name="PluginProcessor.cpp" compile="1"
+            resource="0" file="Source/PluginProcessor.cpp"/>
+      <FILE id="PluginProcessor.h" name="PluginProcessor.h" compile="0" resource="0"
+            file="Source/PluginProcessor.h"/>
+      <FILE id="PluginEditor.cpp" name="PluginEditor.cpp" compile="1" resource="0"
+            file="Source/PluginEditor.cpp"/>
+      <FILE id="PluginEditor.h" name="PluginEditor.h" compile="0" resource="0"
+            file="Source/PluginEditor.h"/>
+      <FILE id="CustomLookAndFeel.cpp" name="CustomLookAndFeel.cpp" compile="1"
+            resource="0" file="Source/CustomLookAndFeel.cpp"/>
+      <FILE id="WrattDelay.cpp" name="WrattDelay.cpp" compile="1" resource="0"
+            file="Source/WrattDelay.cpp"/>
+      <FILE id="WrattDelay.h" name="WrattDelay.h" compile="0" resource="0"
+            file="Source/WrattDelay.h"/>
+      <FILE id="Definitions.h" name="Definitions.h" compile="0" resource="0"
+            file="Source/Definitions.h"/>
+    </GROUP>
+    <GROUP id="{STK_GROUP}" name="STK Library">
+      <FILE id="Stk.cpp" name="Stk.cpp" compile="1" resource="0" file="Source/STK/Stk.cpp"/>
+      <FILE id="Stk.h" name="Stk.h" compile="0" resource="0" file="Source/STK/Stk.h"/>
+      <FILE id="SineWave.cpp" name="SineWave.cpp" compile="1" resource="0"
+            file="Source/STK/SineWave.cpp"/>
+      <FILE id="SineWave.h" name="SineWave.h" compile="0" resource="0" file="Source/STK/SineWave.h"/>
+      <FILE id="BlitSquare.cpp" name="BlitSquare.cpp" compile="1" resource="0"
+            file="Source/STK/BlitSquare.cpp"/>
+      <FILE id="BlitSquare.h" name="BlitSquare.h" compile="0" resource="0"
+            file="Source/STK/BlitSquare.h"/>
+      <FILE id="BlitSaw.cpp" name="BlitSaw.cpp" compile="1" resource="0"
+            file="Source/STK/BlitSaw.cpp"/>
+      <FILE id="BlitSaw.h" name="BlitSaw.h" compile="0" resource="0" file="Source/STK/BlitSaw.h"/>
+      <FILE id="Noise.cpp" name="Noise.cpp" compile="1" resource="0" file="Source/STK/Noise.cpp"/>
+      <FILE id="Noise.h" name="Noise.h" compile="0" resource="0" file="Source/STK/Noise.h"/>
+      <FILE id="ADSR.cpp" name="ADSR.cpp" compile="1" resource="0" file="Source/STK/ADSR.cpp"/>
+      <FILE id="ADSR.h" name="ADSR.h" compile="0" resource="0" file="Source/STK/ADSR.h"/>
+      <FILE id="FreeVerb.cpp" name="FreeVerb.cpp" compile="1" resource="0"
+            file="Source/STK/FreeVerb.cpp"/>
+      <FILE id="FreeVerb.h" name="FreeVerb.h" compile="0" resource="0" file="Source/STK/FreeVerb.h"/>
+      <FILE id="Chorus.cpp" name="Chorus.cpp" compile="1" resource="0" file="Source/STK/Chorus.cpp"/>
+      <FILE id="Chorus.h" name="Chorus.h" compile="0" resource="0" file="Source/STK/Chorus.h"/>
     </GROUP>
   </MAINGROUP>
   <EXPORTFORMATS>

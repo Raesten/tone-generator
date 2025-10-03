@@ -8,18 +8,19 @@
 
 MainComponent::MainComponent()
 {
-    // Apply minimal look and feel
+    // Apply minimal look and feel for general UI
     setLookAndFeel(&lookAndFeelMinimal);
     
+    // Initialize STK synthesizer
+    for (int i = 0; i < defaultNumVoices; ++i)
+        synth.addVoice(new OscilVoice());
+    
+    synth.addSound(new OscilSound());
+    
     setupFlexBoxLayout();
-    setupFrequencyControls();
     setupWaveformControls();
-    setupVolumeControls();
     setupNoteButtons();
-    setupChordButtons();
-    setupAdvancedControls();
-    setupPlayStopButton();
-    setupUIFeedback();
+    setupAdvancedControlsBasic(); // Only create toggle button, defer slider creation
     
     // Set initial window size - responsive design with more space
     setSize(1000, 800); // Larger default to accommodate better spacing
@@ -27,22 +28,42 @@ MainComponent::MainComponent()
     // Enable keyboard input for debugging
     setWantsKeyboardFocus(true);
     
-    // Initialize audio safely with JUCE defaults and fallback
-    std::cout << "=== MainComponent constructor: About to call initialiseAudioSafely() ===" << std::endl;
+    // Initialize audio immediately - JUCE AudioAppComponent requires this for proper function
+    std::cout << "=== MainComponent constructor: Initializing audio for proper AudioAppComponent function ===" << std::endl;
     std::cout.flush();
     initialiseAudioSafely();
-    std::cout << "=== MainComponent constructor: initialiseAudioSafely() completed ===" << std::endl;
+    std::cout << "=== MainComponent constructor: Audio initialization completed ===" << std::endl;
     std::cout.flush();
     
-    // Initialize synthesizer parameters
-    updateAdvancedControls();
+    // Initialize chorus parameters for warm, soft sound
+    chorus.setRate(0.12f);        // Gentle rate for soft movement
+    chorus.setDepth(0.2f);        // Subtle modulation for warmth
+    chorus.setCentreDelay(0.008f); // Shorter delay for gentler effect
+    chorus.setFeedback(0.05f);    // Minimal feedback for soft sound
+    chorus.setMix(0.15f);         // Gentle chorus for warmth
     
-    // Initialize state persistence
+    // Initialize smoothed values for warm, soft effects (50ms smoothing time)
+    smoothedReverbRoomSize.reset(44100, 0.6f);   // Smaller room for warmth
+    smoothedReverbDamping.reset(44100, 0.7f);    // Higher damping for softer tone
+    smoothedReverbWet.reset(44100, 0.25f);       // Moderate reverb for warmth
+    smoothedReverbDry.reset(44100, 0.9f);        // More dry signal for clarity
+    smoothedReverbWidth.reset(44100, 0.8f);      // Narrower width for warmth
+    smoothedChorusRate.reset(44100, 0.12f);      // Gentle rate for softness
+    smoothedChorusDepth.reset(44100, 0.2f);      // Subtle modulation
+    smoothedChorusMix.reset(44100, 0.15f);       // Gentle chorus for warmth
+    
+    // Initialize performance monitoring
+    performanceMode = 0; // Start in normal mode
+    cpuUsageCounter = 0;
+    
+    // Initialize state persistence (defer loading for better startup performance)
     initializePropertiesFile();
-    loadState();
+    // State loading will be done after UI construction is complete
+    startTimer(50); // Load state 50ms after constructor completes
     
-    // Set up accessibility focus order
-    setupAccessibilityFocusOrder();
+    // Setup accessibility focus order for basic controls only
+    // Advanced controls focus order will be set when sliders are lazily loaded
+    setupBasicAccessibilityFocusOrder();
 }
 
 MainComponent::~MainComponent()
@@ -50,12 +71,18 @@ MainComponent::~MainComponent()
     // Save state before shutting down
     saveState();
     
+    // Clean up look and feel references
     setLookAndFeel(nullptr);
+    
+    // Reset individual button look and feels
+    for (auto& button : noteButtons) {
+        button.setLookAndFeel(nullptr);
+    }
+    
     shutdownAudio();
     
 #if JUCE_IOS
     // Clean up audio notification observers
-    [[NSNotificationCenter defaultCenter] removeObserver:(__bridge id)this name:AVAudioSessionRouteChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:(__bridge id)this name:AVAudioSessionInterruptionNotification object:nil];
 #endif
 }
@@ -80,18 +107,28 @@ void MainComponent::setupNoteButtons()
     // Create and configure 12 note toggle buttons (C, C#, D, D#, E, F, F#, G, G#, A, A#, B)
     // Each button can be toggled on/off to form custom chords
     // Initial size will be set dynamically in updateButtonSizes()
-    for (int i = 0; i < 12; ++i)
+    for (size_t i = 0; i < 12; ++i)
     {
         noteButtons[i].setButtonText(noteNames[i]);
         noteButtons[i].setClickingTogglesState(true); // Enable toggle behavior - buttons stay "down" when active
-        noteButtons[i].onClick = [this, i] { onNoteButtonClicked(i); };
+        noteButtons[i].onClick = [this, i] { 
+            std::cout << "LAMBDA CALLED for button " << i << std::endl;
+            onNoteButtonClicked(static_cast<int>(i)); 
+        };
         
-        // Theme-based styling - colors are set by LookAndFeel
-        // Additional custom styling for special states using theme colors
-        noteButtons[i].setColour(juce::TextButton::buttonColourId, Theme::noteOff);
-        noteButtons[i].setColour(juce::TextButton::buttonOnColourId, Theme::noteSelected);
-        noteButtons[i].setColour(juce::TextButton::textColourOffId, Theme::text);
-        noteButtons[i].setColour(juce::TextButton::textColourOnId, juce::Colour(0xff000000));
+        // Add press animation support
+        noteButtons[i].onStateChange = [this, i] {
+            bool isPressed = noteButtons[i].getToggleState();
+            lookAndFeelKeyTiles.animateKeyTilePress(noteButtons[i], isPressed);
+            
+            // Trigger haptic feedback on press
+            if (isPressed) {
+                triggerHapticFeedback();
+            }
+        };
+        
+        // Apply specialized key tile look and feel for note buttons
+        noteButtons[i].setLookAndFeel(&lookAndFeelKeyTiles);
         
         // VoiceOver accessibility
         noteButtons[i].setAccessible(true);
@@ -103,49 +140,8 @@ void MainComponent::setupNoteButtons()
     updateButtonSizes();
 }
 
-void MainComponent::setupChordButtons()
-{
-    // Set up chord buttons layout
-    chordFlexBox.flexDirection = juce::FlexBox::Direction::row;
-    chordFlexBox.alignItems = juce::FlexBox::AlignItems::center;
-    chordFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    chordFlexBox.flexWrap = juce::FlexBox::Wrap::wrap;
-    
-    // Configure chord buttons with theme styling
-    cMajorButton.setButtonText("C Major");
-    cMajorButton.setSize(120, 50);
-    cMajorButton.onClick = [this] { padSynthesizer.triggerMajorChord(60, 0.8f); };
-    cMajorButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    cMajorButton.setColour(juce::TextButton::textColourOffId, Theme::text);
-    cMajorButton.setAccessible(true);
-    playPanel.addAndMakeVisible(cMajorButton);
-    
-    cMinorButton.setButtonText("C Minor");
-    cMinorButton.setSize(120, 50);
-    cMinorButton.onClick = [this] { padSynthesizer.triggerMinorChord(60, 0.8f); };
-    cMinorButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    cMinorButton.setColour(juce::TextButton::textColourOffId, Theme::text);
-    cMinorButton.setAccessible(true);
-    playPanel.addAndMakeVisible(cMinorButton);
-    
-    cSus2Button.setButtonText("C Sus2");
-    cSus2Button.setSize(120, 50);
-    cSus2Button.onClick = [this] { padSynthesizer.triggerSus2Chord(60, 0.8f); };
-    cSus2Button.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    cSus2Button.setColour(juce::TextButton::textColourOffId, Theme::text);
-    cSus2Button.setAccessible(true);
-    playPanel.addAndMakeVisible(cSus2Button);
-    
-    cSus4Button.setButtonText("C Sus4");
-    cSus4Button.setSize(120, 50);
-    cSus4Button.onClick = [this] { padSynthesizer.triggerSus4Chord(60, 0.8f); };
-    cSus4Button.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    cSus4Button.setColour(juce::TextButton::textColourOffId, Theme::text);
-    cSus4Button.setAccessible(true);
-    playPanel.addAndMakeVisible(cSus4Button);
-}
 
-void MainComponent::setupAdvancedControls()
+void MainComponent::setupAdvancedControlsBasic()
 {
     // Set up play panel container
     addAndMakeVisible(playPanel);
@@ -158,6 +154,15 @@ void MainComponent::setupAdvancedControls()
     advancedControlsToggle.setSize(200, 44); // Minimum 44pt for proper hit targets
         advancedControlsToggle.onClick = [this] { 
             showAdvanced = advancedControlsToggle.getToggleState();
+            
+            // Lazy load advanced sliders when first accessed
+            if (showAdvanced && !advancedSlidersCreated) {
+                std::cout << "=== Lazy loading advanced sliders for first time ===" << std::endl;
+                createAdvancedSliders();
+                advancedSlidersCreated = true;
+                std::cout << "=== Advanced sliders lazy loading completed ===" << std::endl;
+            }
+            
             playPanel.setVisible(!showAdvanced);
             advancedVP.setVisible(showAdvanced);
             
@@ -166,6 +171,9 @@ void MainComponent::setupAdvancedControls()
             if (showAdvanced) dividerComponent.setBounds(0,0,0,0);
             
             if (showAdvanced) advancedVP.toFront(false); // above playPanel
+            
+            // Update synthesizer parameters when advanced controls are shown
+            if (showAdvanced) updateAdvancedControls();
             
             // Sanity check - should never see both panels true
             juce::Logger::writeToLog(juce::String("Advanced=") + (showAdvanced ? "on" : "off") +
@@ -177,259 +185,212 @@ void MainComponent::setupAdvancedControls()
     advancedControlsToggle.setColour(juce::ToggleButton::tickColourId, Theme::accent);
     advancedControlsToggle.setColour(juce::ToggleButton::tickDisabledColourId, Theme::textDim);
     advancedControlsToggle.setAccessible(true);
+    // Hide the toggle button to simplify UI while keeping functionality
+    advancedControlsToggle.setVisible(false);
     addAndMakeVisible(advancedControlsToggle);
     
-    // Initialize advanced panel viewport
+    // Initialize advanced panel viewport (but without sliders)
     addAndMakeVisible(advancedVP);
     advancedVP.setViewedComponent(&advancedPanel, false);
     advancedVP.setScrollBarsShown(false, false); // hide both scrollbars completely
     advancedVP.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, juce::Colours::transparentBlack);
     advancedVP.getVerticalScrollBar().setColour(juce::ScrollBar::trackColourId, juce::Colours::transparentBlack);
     advancedVP.setVisible(false); // default hidden
+}
+
+void MainComponent::createAdvancedSliders()
+{
     
     // Create sliders with synth parameters
-    auto make = [&](int i, const juce::String& name) {
-        advancedPanel.labels[i] = std::make_unique<juce::Label>();
-        advancedPanel.sliders[i] = std::make_unique<juce::Slider>();
-        auto& s = *advancedPanel.sliders[i];
+    auto make = [&](int i, const juce::String& /*name*/) {
+        advancedPanel.labels[static_cast<size_t>(i)] = std::make_unique<juce::Label>();
+        advancedPanel.sliders[static_cast<size_t>(i)] = std::make_unique<juce::Slider>();
+        auto& s = *advancedPanel.sliders[static_cast<size_t>(i)];
         s.setSliderStyle(juce::Slider::LinearVertical);
-        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 18);
+        s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 16);
+        s.setColour(juce::Slider::trackColourId, Theme::knobTrack);
+        s.setColour(juce::Slider::thumbColourId, Theme::knobFill);
+        s.setColour(juce::Slider::textBoxTextColourId, Theme::text);
+        s.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
         s.onValueChange = [this] { updateAdvancedControls(); };
         advancedPanel.addAndMakeVisible(s);
     };
     
     make(0, "Detune"); make(1, "Osc Mix"); make(2, "Attack"); make(3, "Decay");
     make(4, "Sustain"); make(5, "Release"); make(6, "Filter Cutoff"); make(7, "Resonance");
-    make(8, "Reverb Size"); make(9, "Reverb Damp"); make(10, "Reverb Wet"); make(11, "Reverb Dry");
+    make(8, "Filter Env Amt"); make(9, "Filter Env A"); make(10, "Filter Env D"); make(11, "Filter Env S");
+    make(12, "Filter Env R"); make(13, "Filter LFO Depth"); make(14, "Filter LFO Rate"); make(15, "Pitch LFO Depth");
+    make(16, "Pitch LFO Rate"); make(17, "Reverb Size"); make(18, "Reverb Damping"); 
+    make(19, "Reverb Wet"); make(20, "Reverb Dry"); make(21, "Reverb Width");
+    make(22, "Chorus Rate"); make(23, "Chorus Depth"); make(24, "Chorus Mix");
     
-    // Set up slider ranges and values
-    advancedPanel.sliders[0]->setRange(0.0, 2.0, 0.01); advancedPanel.sliders[0]->setValue(0.1); // Detune
-    advancedPanel.sliders[1]->setRange(1, 8, 1); advancedPanel.sliders[1]->setValue(4); // Osc Mix
-    advancedPanel.sliders[2]->setRange(0.001, 2.0, 0.001); advancedPanel.sliders[2]->setValue(0.1); // Attack
-    advancedPanel.sliders[3]->setRange(0.001, 2.0, 0.001); advancedPanel.sliders[3]->setValue(0.3); // Decay
-    advancedPanel.sliders[4]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[4]->setValue(0.7); // Sustain
-    advancedPanel.sliders[5]->setRange(0.001, 5.0, 0.001); advancedPanel.sliders[5]->setValue(2.0); // Release
-    advancedPanel.sliders[6]->setRange(100.0, 8000.0, 1.0); advancedPanel.sliders[6]->setValue(1000.0); // Filter Cutoff
-    advancedPanel.sliders[7]->setRange(0.1, 2.0, 0.01); advancedPanel.sliders[7]->setValue(0.7); // Resonance
-    advancedPanel.sliders[8]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[8]->setValue(0.5); // Reverb Size
-    advancedPanel.sliders[9]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[9]->setValue(0.5); // Reverb Damp
-    advancedPanel.sliders[10]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[10]->setValue(0.3); // Reverb Wet
-    advancedPanel.sliders[11]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[11]->setValue(0.4); // Reverb Dry
+    // Set up slider ranges and values for lush, deep sound
+    advancedPanel.sliders[0]->setRange(0.0, 2.0, 0.01); advancedPanel.sliders[0]->setValue(0.12); // Detune Amount (semitones) - More detuning for lushness
+    advancedPanel.sliders[1]->setRange(1, 8, 1); advancedPanel.sliders[1]->setValue(4); // Unison Count (oscillators) - 4 oscillators for richness
+        advancedPanel.sliders[2]->setRange(0.01, 0.5, 0.001); advancedPanel.sliders[2]->setValue(0.15); // Attack Time (seconds) - Slightly slower for lushness
+        advancedPanel.sliders[3]->setRange(0.01, 0.3, 0.001); advancedPanel.sliders[3]->setValue(0.12); // Decay Time (seconds) - Slightly slower
+        advancedPanel.sliders[4]->setRange(0.6, 0.9, 0.01); advancedPanel.sliders[4]->setValue(0.85); // Sustain Level (0-1) - Higher for lushness
+        advancedPanel.sliders[5]->setRange(0.1, 1.0, 0.001); advancedPanel.sliders[5]->setValue(0.4); // Release Time (seconds) - Longer for lushness
+    advancedPanel.sliders[6]->setRange(800.0, 2000.0, 1.0); advancedPanel.sliders[6]->setValue(1200.0); // Filter Cutoff (Hz) - Higher for brightness
+    advancedPanel.sliders[7]->setRange(0.5, 0.8, 0.01); advancedPanel.sliders[7]->setValue(0.55); // Filter Resonance (Q) - More resonance for character
+    advancedPanel.sliders[8]->setRange(0.0, 1000.0, 10.0); advancedPanel.sliders[8]->setValue(500.0); // Filter Env Amount (Hz) - More movement
+    advancedPanel.sliders[9]->setRange(0.01, 1.0, 0.001); advancedPanel.sliders[9]->setValue(0.3); // Filter Env Attack (s) - Faster attack
+    advancedPanel.sliders[10]->setRange(0.01, 1.0, 0.001); advancedPanel.sliders[10]->setValue(0.5); // Filter Env Decay (s) - Medium decay
+    advancedPanel.sliders[11]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[11]->setValue(0.7); // Filter Env Sustain (0-1) - Higher sustain
+    advancedPanel.sliders[12]->setRange(0.01, 2.0, 0.001); advancedPanel.sliders[12]->setValue(0.8); // Filter Env Release (s) - Medium release
+    advancedPanel.sliders[13]->setRange(0.0, 50.0, 1.0); advancedPanel.sliders[13]->setValue(15.0); // Filter LFO Depth (Hz) - More movement
+    advancedPanel.sliders[14]->setRange(0.05, 0.2, 0.001); advancedPanel.sliders[14]->setValue(0.08); // Filter LFO Rate (Hz) - Slower for lushness
+    advancedPanel.sliders[15]->setRange(0.0, 2.0, 0.1); advancedPanel.sliders[15]->setValue(0.5); // Pitch LFO Depth (cents) - Subtle pitch movement
+    advancedPanel.sliders[16]->setRange(4.0, 6.0, 0.1); advancedPanel.sliders[16]->setValue(4.5); // Pitch LFO Rate (Hz) - Slower for lushness
+    advancedPanel.sliders[17]->setRange(0.65, 0.85, 0.01); advancedPanel.sliders[17]->setValue(0.85); // Reverb Room Size (0-1) - Large room for depth
+    advancedPanel.sliders[18]->setRange(0.35, 0.5, 0.01); advancedPanel.sliders[18]->setValue(0.35); // Reverb Damping (0-1) - Less damping for lushness
+    advancedPanel.sliders[19]->setRange(0.25, 0.45, 0.01); advancedPanel.sliders[19]->setValue(0.45); // Reverb Wet Level (0-1) - More reverb for lushness
+    advancedPanel.sliders[20]->setRange(0.6, 1.0, 0.01); advancedPanel.sliders[20]->setValue(0.8); // Reverb Dry Level (0-1) - Less dry
+    advancedPanel.sliders[21]->setRange(0.0, 1.0, 0.01); advancedPanel.sliders[21]->setValue(1.0); // Reverb Width (0-1) - Full stereo width
+    advancedPanel.sliders[22]->setRange(0.15, 0.35, 0.001); advancedPanel.sliders[22]->setValue(0.15); // Chorus Rate (Hz) - Slower for lushness
+    advancedPanel.sliders[23]->setRange(0.25, 0.4, 0.001); advancedPanel.sliders[23]->setValue(0.45); // Chorus Depth (0-1) - Deeper modulation
+    advancedPanel.sliders[24]->setRange(0.1, 0.25, 0.001); advancedPanel.sliders[24]->setValue(0.25); // Chorus Mix (0-1) - More chorus for richness
     
-    // Set up labels
-    for (int i = 0; i < 12; ++i) {
-        advancedPanel.labels[i]->setText(advancedPanel.sliders[i]->getName(), juce::dontSendNotification);
+    // Set up labels with proper parameter names
+    juce::StringArray paramNames = {
+        "Detune", "Osc Count", "Attack", "Decay", "Sustain", "Release",
+        "Filter Cut", "Resonance", "Filter Env", "Filter A", "Filter D", "Filter S",
+        "Filter R", "Filter LFO", "Filter Rate", "Pitch LFO", "Pitch Rate", "Reverb Size",
+        "Reverb Damp", "Reverb Wet", "Reverb Dry", "Reverb Width", "Chorus Rate", "Chorus Depth", "Chorus Mix"
+    };
+    
+    for (size_t i = 0; i < 25; ++i) { // Updated for 25 sliders
+        advancedPanel.labels[i]->setText(paramNames[static_cast<int>(i)], juce::dontSendNotification);
         advancedPanel.labels[i]->setJustificationType(juce::Justification::centred);
-        advancedPanel.labels[i]->setColour(juce::Label::textColourId, Theme::text);
+        advancedPanel.labels[i]->setColour(juce::Label::textColourId, Theme::textDim);
+        advancedPanel.labels[i]->setFont(Theme::label(0.8f)); // Smaller font for parameter names
         advancedPanel.addAndMakeVisible(advancedPanel.labels[i].get());
     }
+    
+    // Set up accessibility focus order for the newly created sliders
+    setupAdvancedAccessibilityFocusOrder();
 }
 
-void MainComponent::setupPlayStopButton()
-{
-    // Set up main control buttons layout
-    controlFlexBox.flexDirection = juce::FlexBox::Direction::row;
-    controlFlexBox.alignItems = juce::FlexBox::AlignItems::center;
-    controlFlexBox.justifyContent = juce::FlexBox::JustifyContent::spaceBetween;
-    controlFlexBox.flexWrap = juce::FlexBox::Wrap::wrap;
-    
-    // Play/Stop button with theme styling
-    playStopButton.setButtonText("Play");
-    playStopButton.setSize(150, 60);
-    playStopButton.onClick = [this] { onPlayStopClicked(); };
-    playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    playStopButton.setColour(juce::TextButton::textColourOffId, Theme::text);
-    playStopButton.setAccessible(true);
-    addAndMakeVisible(playStopButton);
-    
-    // Release All button with theme styling
-    releaseAllButton.setButtonText("Release All");
-    releaseAllButton.setSize(150, 60);
-    releaseAllButton.onClick = [this] { onReleaseAllClicked(); };
-    releaseAllButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-    releaseAllButton.setColour(juce::TextButton::textColourOffId, Theme::text);
-    releaseAllButton.setAccessible(true);
-    addAndMakeVisible(releaseAllButton);
-}
 
-void MainComponent::setupUIFeedback()
-{
-    // Set up chord display label with theme typography and stabilization
-    chordDisplayLabel.setText("No notes selected", juce::dontSendNotification);
-    chordDisplayLabel.setFont(Theme::readout(0.5f)); // Responsive scaling
-    chordDisplayLabel.setColour(juce::Label::textColourId, Theme::text);
-    chordDisplayLabel.setJustificationType(juce::Justification::centred);
-    chordDisplayLabel.setMinimumHorizontalScale(0.8f); // Allow text to shrink to prevent jumping
-    playPanel.addAndMakeVisible(chordDisplayLabel);
-    
-    // Set up playback status label with theme typography and stabilization
-    playbackStatusLabel.setText("Stopped", juce::dontSendNotification);
-    playbackStatusLabel.setFont(Theme::label());
-    playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusStopped);
-    playbackStatusLabel.setJustificationType(juce::Justification::centred);
-    playbackStatusLabel.setMinimumHorizontalScale(0.8f); // Allow text to shrink to prevent jumping
-    playPanel.addAndMakeVisible(playbackStatusLabel);
-    
-    // Set up active notes label with theme typography and stabilization
-    activeNotesLabel.setText("", juce::dontSendNotification);
-    activeNotesLabel.setFont(Theme::label(0.85f)); // Slightly smaller
-    activeNotesLabel.setColour(juce::Label::textColourId, Theme::accent);
-    activeNotesLabel.setJustificationType(juce::Justification::centred);
-    activeNotesLabel.setMinimumHorizontalScale(0.8f); // Allow text to shrink to prevent jumping
-    playPanel.addAndMakeVisible(activeNotesLabel);
-}
 
-void MainComponent::setupFrequencyControls()
-{
-    // Set up frequency readout with theme typography
-    freqReadout.setText("440.0 Hz", juce::dontSendNotification);
-    freqReadout.setFont(Theme::readout());
-    freqReadout.setColour(juce::Label::textColourId, Theme::text);
-    freqReadout.setJustificationType(juce::Justification::centred);
-    playPanel.addAndMakeVisible(freqReadout);
-    
-    // Set up swipe instruction label
-    subLabel.setText("Swipe LR: +/-10 Hz  |  UD: +/-1 Hz", juce::dontSendNotification);
-    subLabel.setFont(Theme::label());
-    subLabel.setColour(juce::Label::textColourId, Theme::textDim);
-    subLabel.setJustificationType(juce::Justification::centred);
-    playPanel.addAndMakeVisible(subLabel);
-}
 
 void MainComponent::setupWaveformControls()
 {
-    // Create waveform segment buttons
-    for (int i = 0; i < waves.size(); ++i)
+    // Create waveform segment buttons but keep them hidden
+    juce::StringArray shortWaves = { "Sin", "Sqr", "Tri", "Saw" };
+    
+    for (size_t i = 0; i < static_cast<size_t>(waves.size()); ++i)
     {
-        auto* b = waveBtns.add(new juce::TextButton(waves[i]));
+        auto* b = waveBtns.add(new juce::TextButton(shortWaves[static_cast<int>(i)]));
         b->setClickingTogglesState(true);
-        b->onClick = [this, i]() { setWave(i); };
+        b->onClick = [this, i]() { setWave(static_cast<int>(i)); };
         b->setColour(juce::TextButton::buttonColourId, Theme::btnOff);
         b->setColour(juce::TextButton::textColourOffId, Theme::text);
         b->setColour(juce::TextButton::buttonOnColourId, Theme::btnOn);
         b->setColour(juce::TextButton::textColourOnId, Theme::bg);
+        
+        // Set tooltip with full name for accessibility
+        b->setTooltip(waves[static_cast<int>(i)]);
+        
+        // Add to playPanel but keep hidden
         playPanel.addAndMakeVisible(b);
+        b->setVisible(false); // Hide immediately after creation
+        b->setBounds(0, 0, 0, 0); // Set zero bounds
     }
-    setWave(0); // Set initial waveform
+    setWave(2); // Set initial waveform to Triangle for richer harmonics while maintaining warmth
 }
 
-void MainComponent::setupVolumeControls()
-{
-    // Set up volume label
-    volLabel.setText("Volume", juce::dontSendNotification);
-    volLabel.setFont(Theme::label());
-    volLabel.setColour(juce::Label::textColourId, Theme::textDim);
-    volLabel.setJustificationType(juce::Justification::centred);
-    volLabel.setMinimumHorizontalScale(0.6f); // allow shrinking to prevent truncation
-    playPanel.addAndMakeVisible(volLabel);
-    
-    // Set up volume sliders
-    auto setupSlider = [](juce::Slider& s)
-    {
-        s.setSliderStyle(juce::Slider::LinearVertical);
-        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-        s.setRange(0.0, 1.0, 0.0);
-        s.setValue(0.8);
-    };
-    
-    setupSlider(masterSlider);
-    setupSlider(leftSlider);
-    setupSlider(rightSlider);
-    
-    // Add value change callbacks for state persistence
-    masterSlider.onValueChange = [this] { saveState(); };
-    leftSlider.onValueChange = [this] { saveState(); };
-    rightSlider.onValueChange = [this] { saveState(); };
-    
-    // VoiceOver accessibility for volume sliders
-    masterSlider.setAccessible(true);
-    leftSlider.setAccessible(true);
-    rightSlider.setAccessible(true);
-    
-    playPanel.addAndMakeVisible(masterSlider);
-    playPanel.addAndMakeVisible(leftSlider);
-    playPanel.addAndMakeVisible(rightSlider);
-}
 
 void MainComponent::prepareToPlay(int samplesPerBlockExpected, double sampleRate)
 {
     DBG("=== prepareToPlay called ===");
     DBG("Sample Rate: " << sampleRate << " Hz");
     DBG("Block Size: " << samplesPerBlockExpected);
-    DBG("isAudioInitialized before: " << (isAudioInitialized ? "true" : "false"));
-    
-    // Check if we have a valid sample rate (not 0 Hz from iOS Simulator)
-    if (sampleRate <= 0.0)
-    {
-        DBG("Invalid sample rate detected in prepareToPlay: " << sampleRate << " Hz");
-
-        // Use a fallback sample rate for iOS Simulator
-        sampleRate = 48000.0; // Use 48 kHz as fallback (matches iOS reality)
-        DBG("Using fallback sample rate: " << sampleRate << " Hz");
-
-        // Show a warning to the user
-        juce::AlertWindow::showMessageBoxAsync(
-            juce::AlertWindow::WarningIcon,
-            "Audio Warning",
-            "iOS Simulator audio issue detected.\n\n"
-            "The app will use a fallback sample rate (48000 Hz).\n"
-            "For best results:\n"
-            "1. Go to I/O → Audio Output in the Simulator\n"
-            "2. Select a real device (e.g., 'MacBook Speakers')\n"
-            "3. Restart the app\n\n"
-            "This issue rarely occurs on real devices.",
-            "OK"
-        );
-    }
-    else
-    {
-        // Use the actual sample rate provided by the device
-        DBG("Using device-provided sample rate: " << sampleRate << " Hz (no fallback needed)");
-    }
     
     // Validate sample rate is reasonable
-    if (sampleRate < 8000.0 || sampleRate > 192000.0)
+    if (sampleRate <= 0.0 || sampleRate < 8000.0 || sampleRate > 192000.0)
     {
-        DBG("Sample rate out of reasonable range: " << sampleRate << " Hz, using 48000 Hz fallback");
-        sampleRate = 48000.0; // Use 48 kHz fallback (matches iOS reality)
+        DBG("Invalid sample rate detected: " << sampleRate << " Hz, using 44100 Hz fallback");
+        sampleRate = 44100.0; // Use 44.1 kHz as fallback
     }
     
     // Validate block size is reasonable
     if (samplesPerBlockExpected <= 0 || samplesPerBlockExpected > 4096)
     {
-        DBG("Block size out of reasonable range: " << samplesPerBlockExpected << ", using 512 fallback");
+        DBG("Invalid block size: " << samplesPerBlockExpected << ", using 512 fallback");
         samplesPerBlockExpected = 512;
     }
     
     try
     {
-        // JUCE Synthesiser setup (do this once)
-        padSynthesizer.clearVoices();
-        for (int i = 0; i < 8; ++i)
-            padSynthesizer.addVoice(new PadVoice());   // your real voice class
-
-        padSynthesizer.clearSounds();
-        padSynthesizer.addSound(new PadSound());
-
-        padSynthesizer.setCurrentPlaybackSampleRate(sampleRate);
+        // Set current playback sample rate for STK synthesizer
+        synth.setCurrentPlaybackSampleRate(sampleRate);
         
-        // CRITICAL: Prepare the synthesizer with sample rate and block size
-        padSynthesizer.prepare(sampleRate, samplesPerBlockExpected);
-        DBG("PadSynthesizer prepared with sample rate: " << sampleRate << " Hz, block size: " << samplesPerBlockExpected);
+        // Reset keyboard state
+        keyboardState.reset();
         
-        // Reverb / DSP setup
+        // Update synthesizer parameters with current UI values
+        updateAdvancedControls();
+        
+        // Reverb / DSP setup for lush, deep sound
         juce::dsp::ProcessSpec spec { sampleRate,
                                       (juce::uint32) juce::jlimit(32, 4096, samplesPerBlockExpected),
                                       2 };
         reverb.reset();
         reverb.prepare(spec);
+        
+        // Set reverb parameters for 100% wet output (auxiliary send/return)
+        reverbParams.roomSize = 0.6f;     // Smaller room for softer sound
+        reverbParams.damping = 0.7f;      // Higher damping for warmer, softer tone
+        reverbParams.wetLevel = 1.0f;     // 100% wet output (no dry signal)
+        reverbParams.dryLevel = 0.0f;     // 0% dry output (auxiliary path)
+        reverbParams.width = 0.8f;        // Slightly narrower for warmth
+        reverbParams.freezeMode = 0.0f;   // Normal mode
+        
         reverb.setParameters(reverbParams);
         
+        // Verify reverb parameters are actually set
+        auto currentParams = reverb.getParameters();
+        DBG("Reverb parameters set - Room: " << reverbParams.roomSize << ", Wet: " << reverbParams.wetLevel << ", Dry: " << reverbParams.dryLevel);
+        DBG("Reverb parameters verified - Room: " << currentParams.roomSize << ", Wet: " << currentParams.wetLevel << ", Dry: " << currentParams.dryLevel);
+        
+        // Chorus setup for stereo width
+        chorus.reset();
+        chorus.prepare(spec);
+        
+        // Set chorus parameters for 100% wet output (auxiliary send/return)
+        chorus.setRate(0.12f);        // Even slower rate for gentler movement
+        chorus.setDepth(0.2f);        // Reduced depth for subtle modulation
+        chorus.setCentreDelay(0.008f); // Shorter delay for less pronounced effect
+        chorus.setFeedback(0.05f);    // Reduced feedback for softer sound
+        chorus.setMix(1.0f);          // 100% wet output (auxiliary path)
+        
+        // Allocate effects buffer once for reuse (largest expected block size)
+        const int maxBlockSize = juce::jlimit(32, 4096, samplesPerBlockExpected);
+        effectsBuffer.setSize(2, maxBlockSize); // Stereo buffer for largest block size
+        DBG("Effects buffer allocated: " << effectsBuffer.getNumChannels() << " channels, " << effectsBuffer.getNumSamples() << " samples");
+        
+        DBG("Chorus parameters set - Rate: " << 0.15f << ", Depth: " << 0.4f << ", Mix: " << 1.0f);
+        
+        // Configure smoothed values with 50ms smoothing time (buttery smooth)
+        const float smoothingTimeMs = 50.0f; // 30-80ms range, using 50ms for buttery smooth
+        smoothedReverbRoomSize.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedReverbDamping.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedReverbWet.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedReverbDry.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedReverbWidth.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedChorusRate.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedChorusDepth.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        smoothedChorusMix.reset(sampleRate, smoothingTimeMs / 1000.0f);
+        
+        // Track current device settings for effects re-preparation
+        currentSampleRate = sampleRate;
+        currentBlockSize = samplesPerBlockExpected;
+        
         isAudioInitialized = true;
-        DBG("=== Audio prepared successfully ===");
-        DBG("Sample rate: " << sampleRate << " Hz");
-        DBG("Block size: " << samplesPerBlockExpected);
-        DBG("isAudioInitialized after: " << (isAudioInitialized ? "true" : "false"));
+        DBG("=== Clean baseline audio prepared successfully ===");
+        DBG("Sample rate: " << sampleRate << " Hz, Block size: " << samplesPerBlockExpected);
+        DBG("Polyphony: " << synth.getNumVoices() << " voices");
     }
     catch (const std::exception& e)
     {
@@ -454,82 +415,166 @@ void MainComponent::getNextAudioBlock(const juce::AudioSourceChannelInfo& buffer
     // Safety check - if audio isn't initialized, just clear the buffer
     if (!isAudioInitialized || bufferToFill.buffer == nullptr || bufferToFill.numSamples == 0)
     {
-        static bool loggedError = false;
-        if (!loggedError)
-        {
-            DBG("ERROR: getNextAudioBlock called but audio not initialized or invalid buffer");
-            DBG("  - isAudioInitialized: " << (isAudioInitialized ? "true" : "false"));
-            DBG("  - buffer: " << (bufferToFill.buffer ? "valid" : "null"));
-            DBG("  - numSamples: " << bufferToFill.numSamples);
-            loggedError = true;
-        }
         bufferToFill.clearActiveBufferRegion();
         return;
     }
     
-    // Clear first, then generate audio
+    // Clean baseline: Clear → render synth → apply master gain → FX
     bufferToFill.clearActiveBufferRegion();
+    
+    // Performance optimization: Denormal protection for older devices
+    juce::ScopedNoDenormals noDenormals;
     
     try
     {
-        if (testToneEnabled)
-        {
-            // Generate simple test tone for debugging
-            static double phase = 0.0;
-            const double frequency = 440.0;
-            const double sampleRate = deviceManager.getCurrentAudioDevice() ? 
-                deviceManager.getCurrentAudioDevice()->getCurrentSampleRate() : 44100.0;
-            
-            for (int i = 0; i < bufferToFill.numSamples; ++i)
-            {
-                float sample = std::sin(phase) * 0.1f; // Low volume test tone
-                phase += 2.0 * juce::MathConstants<double>::pi * frequency / sampleRate;
-                if (phase >= 2.0 * juce::MathConstants<double>::pi)
-                    phase -= 2.0 * juce::MathConstants<double>::pi;
-                
-                // Write to all channels
-                for (int channel = 0; channel < bufferToFill.buffer->getNumChannels(); ++channel)
-                {
-                    bufferToFill.buffer->setSample(channel, bufferToFill.startSample + i, sample);
+        // 1. Render STK synthesizer audio with MIDI from keyboard state
+        juce::MidiBuffer midiBuffer;
+        keyboardState.processNextMidiBuffer(midiBuffer, bufferToFill.startSample, bufferToFill.numSamples, true);
+        
+        // Debug: Log MIDI messages to see what's being sent
+        static int midiDebugCounter = 0;
+        if (midiDebugCounter < 10) { // Only log first 10 callbacks with MIDI
+            if (!midiBuffer.isEmpty()) {
+                DBG("=== MIDI BUFFER DEBUG ===");
+                for (const auto metadata : midiBuffer) {
+                    auto message = metadata.getMessage();
+                    if (message.isNoteOn()) {
+                        DBG("MIDI Note ON: " << message.getNoteNumber() << " (" << juce::MidiMessage::getMidiNoteName(message.getNoteNumber(), true, true, 4) << "), velocity: " << message.getVelocity());
+                    } else if (message.isNoteOff()) {
+                        DBG("MIDI Note OFF: " << message.getNoteNumber() << " (" << juce::MidiMessage::getMidiNoteName(message.getNoteNumber(), true, true, 4) << "), velocity: " << message.getVelocity());
+                    }
+                }
+                midiDebugCounter++;
+            }
+        }
+        
+        // Debug: Always show main audio callback activity
+        static int callCount = 0;
+        callCount++;
+        
+        DBG("MAIN AUDIO CALLBACK #" << callCount << ": numSamples=" << bufferToFill.numSamples << ", channels=" << bufferToFill.buffer->getNumChannels());
+        
+        // Debug: Check buffer before synth rendering
+        float preRms = 0.0f;
+        for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch) {
+            for (int i = 0; i < bufferToFill.numSamples; ++i) {
+                float sample = bufferToFill.buffer->getSample(ch, bufferToFill.startSample + i);
+                preRms += sample * sample;
+            }
+        }
+        preRms = std::sqrt(preRms / (bufferToFill.numSamples * bufferToFill.buffer->getNumChannels()));
+        DBG("MAIN AUDIO: Before synth render - RMS: " << preRms);
+        
+        // Debug: Count active voices before rendering
+        int activeVoices = 0;
+        for (int i = 0; i < synth.getNumVoices(); ++i) {
+            if (auto* voice = dynamic_cast<OscilVoice*>(synth.getVoice(i))) {
+                if (voice->isVoiceActive()) {
+                    activeVoices++;
                 }
             }
+        }
+        
+        synth.renderNextBlock(*bufferToFill.buffer, midiBuffer, bufferToFill.startSample, bufferToFill.numSamples);
+        
+        // Debug: Check buffer after synth rendering
+        float postRms = 0.0f;
+        for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch) {
+            for (int i = 0; i < bufferToFill.numSamples; ++i) {
+                float sample = bufferToFill.buffer->getSample(ch, bufferToFill.startSample + i);
+                postRms += sample * sample;
+            }
+        }
+        postRms = std::sqrt(postRms / (bufferToFill.numSamples * bufferToFill.buffer->getNumChannels()));
+        DBG("MAIN AUDIO: After synth render - RMS: " << postRms << " (Active voices: " << activeVoices << ")");
+        
+        // 1.5. Performance monitoring and optimization
+        adjustPerformanceSettings();
+        
+        // Apply gentle gain reduction for softer sound
+        bufferToFill.buffer->applyGain(bufferToFill.startSample, bufferToFill.numSamples, 0.8f);
+        
+        // 2.5. Update smoothed parameters in real-time for buttery smooth transitions
+        // NOTE: Effects parameters are now set once in prepareToPlay for optimal performance
+        // Only update if UI parameters have changed (handled elsewhere)
+        
+        // 3. Apply FX as Auxiliary Send/Return (Fixed Implementation)
+        // Use pre-allocated effects buffer to avoid real-time allocations
+        if (effectsBuffer.getNumSamples() >= bufferToFill.numSamples)
+        {
+            // Clear the effects buffer for this block
+            effectsBuffer.clear();
             
-            // Debug: Log test tone activity
-            static int testToneCounter = 0;
-            if (++testToneCounter % 1000 == 0) // Every 1000 audio blocks
-            {
-                DBG("Test tone active - Sample rate: " << sampleRate 
-                    << " Hz, Block size: " << bufferToFill.numSamples);
+            // Copy dry signal to effects buffer (auxiliary send)
+            // Ensure we handle both mono and stereo consistently
+            const int numInputChannels = bufferToFill.buffer->getNumChannels();
+            const int numEffectsChannels = effectsBuffer.getNumChannels();
+            
+            for (int ch = 0; ch < juce::jmin(numInputChannels, numEffectsChannels); ++ch) {
+                effectsBuffer.copyFrom(ch, 0, *bufferToFill.buffer, ch, bufferToFill.startSample, bufferToFill.numSamples);
+            }
+            
+            // If input is mono but effects buffer is stereo, duplicate the mono signal
+            if (numInputChannels == 1 && numEffectsChannels == 2) {
+                effectsBuffer.copyFrom(1, 0, effectsBuffer, 0, 0, bufferToFill.numSamples);
+            }
+            
+            // Create audio block for effects processing with correct channel count
+            const int channelsToProcess = juce::jmin(numInputChannels, numEffectsChannels);
+            juce::dsp::AudioBlock<float> effectsBlock(effectsBuffer.getArrayOfWritePointers(), channelsToProcess, bufferToFill.numSamples);
+            juce::dsp::ProcessContextReplacing<float> effectsContext(effectsBlock);
+            
+            // Process effects in block (reverb first, then chorus)
+            reverb.process(effectsContext);
+            chorus.process(effectsContext);
+            
+            // Mix effects back with dry signal (auxiliary return)
+            // Effects are now 100% wet, so we add them to the dry signal
+            const float effectsReturn = 0.15f; // 15% return from effects for softer sound
+            
+            for (int ch = 0; ch < juce::jmin(numInputChannels, channelsToProcess); ++ch) {
+                bufferToFill.buffer->addFrom(ch, bufferToFill.startSample, effectsBuffer, ch, 0, bufferToFill.numSamples, effectsReturn);
             }
         }
         else
         {
-            // Generate synthesizer audio
-            juce::MidiBuffer emptyMidiBuffer;
-            padSynthesizer.renderNextBlock(*bufferToFill.buffer, emptyMidiBuffer, bufferToFill.startSample, bufferToFill.numSamples);
+            // Effects buffer too small - skip effects processing for this block
+            DBG("WARNING: Effects buffer too small (" << effectsBuffer.getNumSamples() << " < " << bufferToFill.numSamples << "), skipping effects");
+        }
+        
+        // Debug: Check FINAL buffer after all processing
+        float finalRms = 0.0f;
+        for (int ch = 0; ch < bufferToFill.buffer->getNumChannels(); ++ch) {
+            for (int i = 0; i < bufferToFill.numSamples; ++i) {
+                float sample = bufferToFill.buffer->getSample(ch, bufferToFill.startSample + i);
+                finalRms += sample * sample;
+            }
+        }
+        finalRms = std::sqrt(finalRms / (bufferToFill.numSamples * bufferToFill.buffer->getNumChannels()));
+        DBG("MAIN AUDIO: FINAL OUTPUT - RMS: " << finalRms);
+        
+        // 5. RMS logging to verify non-zero audio (once per second)
+        static int rmsCounter = 0;
+        static const int rmsLogInterval = 44100 / bufferToFill.numSamples; // Log once per second
+        if (++rmsCounter >= rmsLogInterval)
+        {
+            rmsCounter = 0;
             
-            // Apply master gain from volume slider
-            const float masterGain = juce::jlimit(0.0f, 1.0f, static_cast<float>(masterSlider.getValue()));
-            if (masterGain != 1.0f)
+            // Calculate RMS for verification
+            float rms = 0.0f;
+            for (int channel = 0; channel < bufferToFill.buffer->getNumChannels(); ++channel)
             {
-                bufferToFill.buffer->applyGain(bufferToFill.startSample, bufferToFill.numSamples, masterGain);
+                float channelRms = 0.0f;
+                for (int i = 0; i < bufferToFill.numSamples; ++i)
+                {
+                    float sample = bufferToFill.buffer->getSample(channel, bufferToFill.startSample + i);
+                    channelRms += sample * sample;
+                }
+                channelRms = std::sqrt(channelRms / bufferToFill.numSamples);
+                rms = juce::jmax(rms, channelRms);
             }
             
-            // Apply reverb to the entire mix (after gain)
-            juce::dsp::AudioBlock<float> block(*bufferToFill.buffer);
-            juce::dsp::ProcessContextReplacing<float> context(block);
-            reverb.process(context);
-            
-            // Debug: Log audio activity occasionally
-            static int debugCounter = 0;
-            if (++debugCounter % 1000 == 0) // Every 1000 audio blocks
-            {
-                const double currentSampleRate = deviceManager.getCurrentAudioDevice() ? 
-                    deviceManager.getCurrentAudioDevice()->getCurrentSampleRate() : 44100.0;
-                DBG("Audio rendering active - Sample rate: " << currentSampleRate 
-                    << " Hz, Block size: " << bufferToFill.numSamples 
-                    << ", Master gain: " << masterGain);
-            }
+            DBG("Audio RMS: " << rms);
         }
     }
     catch (const std::exception& e)
@@ -541,28 +586,14 @@ void MainComponent::getNextAudioBlock(const juce::AudioSourceChannelInfo& buffer
 
 void MainComponent::releaseResources()
 {
-    padSynthesizer.allNotesOff(1, true); // Channel 1, allow tail off for graceful release
+    synth.allNotesOff(1, true); // Channel 1, allow tail off for graceful release
+    keyboardState.reset();
 }
 
 void MainComponent::paint(juce::Graphics& g)
 {
-    // Use theme background color
-    g.fillAll(Theme::bg);
-
-    // Only draw card background when not showing advanced controls
-    if (!showAdvanced)
-    {
-    // Card background for center content - apply safe-area padding
-    auto b = getLocalBounds();
-    auto sa = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay()->safeAreaInsets;
-    b = b.withTrimmedTop(sa.getTop()).withTrimmedBottom(sa.getBottom())
-         .withTrimmedLeft(sa.getLeft()).withTrimmedRight(sa.getRight());
-    b = b.reduced(12);
-    
-    auto center = b.withTrimmedTop(90).withTrimmedBottom(Theme::playHeight + 64);
-    g.setColour(Theme::card);
-    g.fillRoundedRectangle(center.toFloat(), Theme::corner);
-    }
+    // Draw gradient background with optional radial vignette
+    BackgroundGradient::drawCanvasBackground(g, getLocalBounds());
 }
 
 void MainComponent::resized()
@@ -575,21 +606,13 @@ void MainComponent::resized()
                .withTrimmedLeft(sa.getLeft()).withTrimmedRight(sa.getRight());
 
     const int gap = 12;
-    const int playH = 64;
-    
-    // Pin play button to bottom after safe-area
-    auto playBar = root.removeFromBottom(playH);
-    playStopButton.setBounds(playBar.reduced(gap));
 
-    // Header elements (always visible at top)
-    auto titleArea = root.removeFromTop(48);
-    auto freqArea = root.removeFromTop(64);
-    auto subArea = root.removeFromTop(22);
+    // Header spacing
     root.removeFromTop(8);
 
-    // Advanced controls toggle (always visible)
-    auto toggleArea = root.removeFromTop(44);
-    advancedControlsToggle.setBounds(toggleArea.withSizeKeepingCentre(200, 44));
+    // Advanced controls toggle (hidden to simplify UI)
+    // auto toggleArea = root.removeFromTop(44);
+    advancedControlsToggle.setBounds(0, 0, 0, 0); // Set zero bounds since it's hidden
     
     // The remainder is content for playPanel OR advancedVP
     auto content = root.reduced(gap);
@@ -605,10 +628,10 @@ void MainComponent::resized()
         advancedVP.setBounds(content);
 
         // Give the inner content a fixed larger height to allow scrolling
-        const int gap = 12;
-        const int rows = 4, cols = 3;
+        const int innerGap = 12;
+        const int rows = 4; /*, cols = 3;*/
         const int rowH = 100; // slider column height; adjust to taste
-        const int innerH = rows * rowH + (rows - 1) * gap + 24;
+        const int innerH = rows * rowH + (rows - 1) * innerGap + 24;
 
         advancedPanel.setSize(content.getWidth(), innerH);
         
@@ -630,7 +653,7 @@ void MainComponent::resized()
         // and call it here, using playPanel.getLocalBounds() as the base area.
         auto panelArea = playPanel.getLocalBounds();
 
-        layoutNotesAndChords(panelArea); // grid code goes here
+        layoutNotes(panelArea); // grid code goes here
         
         // Debug logging for verification
         juce::Logger::writeToLog("Advanced Controls OFF: playPanel vis=" + juce::String((int)playPanel.isVisible()) 
@@ -641,50 +664,45 @@ void MainComponent::resized()
     updateResponsiveLayout();
 }
 
-void MainComponent::layoutNotesAndChords(juce::Rectangle<int> bounds)
+void MainComponent::layoutNotes(juce::Rectangle<int> bounds)
 {
-    // Middle card area
-    auto mid = bounds.withTrimmedBottom(Theme::playHeight + 64);
-
-    // Wave segments (top of the card)
-    juce::Grid seg;
-    seg.autoColumns = juce::Grid::TrackInfo(juce::Grid::Fr(1));
-    seg.templateColumns = { juce::Grid::TrackInfo(juce::Grid::Fr(1)),
-                            juce::Grid::TrackInfo(juce::Grid::Fr(1)),
-                            juce::Grid::TrackInfo(juce::Grid::Fr(1)),
-                            juce::Grid::TrackInfo(juce::Grid::Fr(1)) };
-    seg.rowGap = juce::Grid::Px(Theme::gridGap); 
-    seg.columnGap = juce::Grid::Px(Theme::gridGap);
-
-    juce::Array<juce::GridItem> items;
-    for (auto* btt : waveBtns) { 
-        btt->setBounds({}); 
-        items.add(juce::GridItem(*btt)); 
+    // Ensure minimum height for the layout
+    if (bounds.getHeight() < 400) {
+        DBG("Warning: Layout bounds too small: " << bounds.toString());
+        return; // Don't layout if too small
     }
-    seg.items = items;
-    auto segArea = mid.removeFromTop(Theme::segHeight);
-    seg.performLayout(segArea.reduced(16));
+    
+    // Middle card area - ensure we have enough space
+    auto mid = bounds.withTrimmedBottom(Theme::playHeight + 64);
+    
+    // Hide waveform buttons - no longer part of the GUI
+    for (auto* btn : waveBtns) {
+        btn->setBounds(0, 0, 0, 0);
+        btn->setVisible(false);
+    }
 
-    mid.removeFromTop(20);
+    mid.removeFromTop(12); // Small gap
 
-    // Volume area (Master, L, R)
-    auto volArea = mid.removeFromTop(static_cast<int>(mid.getHeight() * 0.65f)).reduced(24);
-    auto thirdW = volArea.getWidth() / 3;
-    masterSlider.setBounds(volArea.removeFromLeft(thirdW).reduced(thirdW/3, 8));
-    leftSlider.setBounds(volArea.removeFromLeft(thirdW).reduced(thirdW/3, 8));
-    rightSlider.setBounds(volArea.reduced(thirdW/3, 8));
-    volLabel.setBounds(mid.removeFromTop(24));
+    // ---- NOTE GRID ---- (Centered vertically)
+    const int minTap = Theme::keyMinHitSize; // Use theme minimum hit size
+    const int gap = Theme::colGap; // Use theme column gap
+    const int pageMargin = Theme::pageMargin; // Use theme page margins
 
-    // ---- NOTE GRID ----
-    auto noteArea = bounds.removeFromTop(juce::roundToInt(bounds.getHeight() * 0.42f));
-
-    const int minTap = 44;
-    const int gap = juce::roundToInt(Theme::gridGap * 1.5f);
-
-    // Compute columns from width to prevent odd columns
-    int cols = juce::jlimit(3, 6, (noteArea.getWidth() + gap) / (minTap + gap));
+    // Calculate available width with proper margins
+    int availableWidth = bounds.getWidth() - (2 * pageMargin);
+    
+    // Force 3x4 grid layout (3 columns, 4 rows)
+    int cols = 3;
     int rows = (12 + cols - 1) / cols;
-    int tile = juce::jmax(minTap, (noteArea.getWidth() - (cols - 1) * gap) / cols);
+    int tile = juce::jmax(minTap, (availableWidth - (cols - 1) * gap) / cols);
+    
+    // Calculate grid dimensions
+    int gridWidth = cols * tile + (cols - 1) * gap;
+    int gridHeight = rows * tile + (rows - 1) * gap;
+    
+    // Center the grid in the available bounds with proper margins
+    auto noteArea = bounds.withSizeKeepingCentre(gridWidth, gridHeight);
+    noteArea = noteArea.withTrimmedLeft(pageMargin).withTrimmedRight(pageMargin);
 
     juce::Grid noteGrid;
     noteGrid.autoFlow = juce::Grid::AutoFlow::row;
@@ -708,63 +726,74 @@ void MainComponent::layoutNotesAndChords(juce::Rectangle<int> bounds)
     for (auto& b : noteButtons)
         noteGrid.items.add(juce::GridItem(b));
 
-    noteGrid.performLayout(noteArea.withHeight(rows * tile + (rows - 1) * gap));
+    noteGrid.performLayout(noteArea);
     
-    // ---- CHORD GRID ----
-    auto chordArea = bounds.removeFromTop(juce::roundToInt(tile * 2.0f + gap * 1.5f)); // about two rows tall
-    
-    // Apply card padding and grid inset to prevent clipping into card edge
-    auto card = chordArea.reduced(Theme::cardPadding); // Inner padding for card content
-    auto gridArea = card.reduced(Theme::gridInset);    // Additional inset for grid layouts
-
-    const int chordMin = 56; // comfortable tap target
-    int chordCols = juce::jlimit(2, 4, (gridArea.getWidth() + gap) / (chordMin + gap));
-    int chordRows = (4 + chordCols - 1) / chordCols;
-
-    int chordW = juce::jmax(chordMin, (gridArea.getWidth() - (chordCols - 1) * gap) / chordCols);
-    int chordH = juce::jmax(chordMin, juce::roundToInt(chordW * 0.75f));
-
-    juce::Grid chord;
-    chord.autoFlow = juce::Grid::AutoFlow::row;
-    chord.alignContent = juce::Grid::AlignContent::center;
-    chord.justifyContent = juce::Grid::JustifyContent::center;
-    chord.alignItems = juce::Grid::AlignItems::stretch;
-    chord.justifyItems = juce::Grid::JustifyItems::stretch;
-
-    // tracks: fixed Px(chordW) and Px(chordH) so there are no leftover gaps
-    chord.templateColumns.clear();
-    for (int c = 0; c < chordCols; ++c)
-        chord.templateColumns.add(juce::Grid::TrackInfo(juce::Grid::Px(chordW)));
-
-    chord.templateRows.clear();
-    for (int r = 0; r < chordRows; ++r)
-        chord.templateRows.add(juce::Grid::TrackInfo(juce::Grid::Px(chordH)));
-
-    chord.rowGap = juce::Grid::Px(gap);
-    chord.columnGap = juce::Grid::Px(gap);
-
-    chord.items.clear();
-    chord.items.add(juce::GridItem(cMajorButton)); // No withWidth/withHeight - let tracks size items
-    chord.items.add(juce::GridItem(cMinorButton));
-    chord.items.add(juce::GridItem(cSus2Button));
-    chord.items.add(juce::GridItem(cSus4Button));
-
-    // Use grid area with proper height calculation to prevent overflow
-    chord.performLayout(gridArea.withHeight(chordRows * chordH + (chordRows - 1) * gap));
+    // Debug: Check if buttons have proper bounds and are visible
+    DBG("=== BUTTON LAYOUT DEBUG ===");
+    for (int i = 0; i < 12; ++i) {
+        auto bounds = noteButtons[i].getBounds();
+        DBG("Button " << i << ": bounds=" << bounds.toString() << ", visible=" << (noteButtons[i].isVisible() ? "true" : "false"));
+    }
+    DBG("PlayPanel bounds: " << playPanel.getBounds().toString() << ", visible=" << (playPanel.isVisible() ? "true" : "false"));
     
     // Divider component
     auto dividerArea = bounds.removeFromTop(1);
     dividerComponent.setBounds(dividerArea);
 }
 
+void MainComponent::layoutCompactNoteGrid(juce::Rectangle<int> bounds)
+{
+    // Simple compact layout - just the note grid
+    const int minTap = 44;
+    const int gap = 8;
+    
+    // 3x4 grid layout
+    int cols = 3;
+    int rows = (12 + cols - 1) / cols;
+    int tile = juce::jmax(minTap, (bounds.getWidth() - (cols - 1) * gap) / cols);
+    
+    // Center the grid
+    int gridWidth = cols * tile + (cols - 1) * gap;
+    int gridHeight = rows * tile + (rows - 1) * gap;
+    auto gridArea = bounds.withSizeKeepingCentre(gridWidth, gridHeight);
+    
+    // Layout note buttons in grid
+    int buttonIndex = 0;
+    for (int row = 0; row < rows && buttonIndex < 12; ++row) {
+        for (int col = 0; col < cols && buttonIndex < 12; ++col) {
+            int x = gridArea.getX() + col * (tile + gap);
+            int y = gridArea.getY() + row * (tile + gap);
+            noteButtons[buttonIndex].setBounds(x, y, tile, tile);
+            ++buttonIndex;
+        }
+    }
+    
+    // Hide waveform buttons and volume controls in compact mode
+    for (auto* btn : waveBtns) {
+        btn->setBounds(0, 0, 0, 0);
+        btn->setVisible(false);
+    }
+}
+
 void MainComponent::onNoteButtonClicked(int noteIndex)
 {
+    // Force debug output to console
+    std::cout << "=== NOTE BUTTON CLICKED: " << noteIndex << " ===" << std::endl;
+    std::cout << "isAudioInitialized: " << (isAudioInitialized ? "true" : "false") << std::endl;
+    
+    DBG("=== NOTE BUTTON CLICKED: " << noteIndex << " ===");
+    DBG("isAudioInitialized: " << (isAudioInitialized ? "true" : "false"));
+    
     // Add haptic feedback on iOS
     triggerHapticFeedback();
+    
+    // Force immediate repaint for instant visual feedback
+    noteButtons[noteIndex].repaint();
     
     // Audio is now initialized in constructor, just check if it's ready
     if (!isAudioInitialized)
     {
+        DBG("Audio not initialized - returning early");
         // Audio initialization failed - user was already notified
         return;
     }
@@ -773,25 +802,55 @@ void MainComponent::onNoteButtonClicked(int noteIndex)
     const int midiNote = 60 + noteIndex;   // C4 + offset
     const bool on = noteButtons[noteIndex].getToggleState();
 
+    DBG("Button " << noteIndex << " toggle state: " << (on ? "ON" : "OFF"));
+    
+    // Debug: Show current state of all buttons
+    DBG("=== ALL BUTTON STATES ===");
+    for (int i = 0; i < 12; ++i) {
+        bool buttonState = noteButtons[i].getToggleState();
+        DBG("Button " << i << ": " << (buttonState ? "ON" : "OFF"));
+    }
+    DBG("=== END BUTTON STATES ===");
+
     if (on)  
-        padSynthesizer.noteOn(1, midiNote, 0.9f);
+    {
+        DBG("=== Triggering note ON: " << midiNote << " (velocity: 0.9) ===");
+        
+        // Debug: Check voice allocation before triggering note
+        int availableVoices = 0;
+        int busyVoices = 0;
+        for (int i = 0; i < synth.getNumVoices(); ++i) {
+            if (auto* voice = dynamic_cast<OscilVoice*>(synth.getVoice(i))) {
+                if (voice->isVoiceActive()) {
+                    busyVoices++;
+                } else {
+                    availableVoices++;
+                }
+            }
+        }
+        DBG("Before note ON - Busy voices: " << busyVoices << ", Available voices: " << availableVoices);
+        
+        keyboardState.noteOn(1, midiNote, 0.9f);
+    }
     else     
-        padSynthesizer.noteOff(1, midiNote, 0.9f, true);
+    {
+        DBG("=== Triggering note OFF: " << midiNote << " (velocity: 0.9) ===");
+        keyboardState.noteOff(1, midiNote, 0.9f);
+    }
+    
+    // Debug: Show keyboard state
+    DBG("KeyboardState - isNoteOn for note " << midiNote << ": " << (keyboardState.isNoteOn(1, midiNote) ? "true" : "false"));
     
     // If we're not currently playing, start playing automatically
     if (on && !isPlaying)
     {
         isPlaying = true;
-        playStopButton.setButtonText("Stop");
-        playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnActive);
-        playbackStatusLabel.setText("Playing", juce::dontSendNotification);
-        playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusPlaying);
     }
     else if (!on)
     {
         // Check if any notes are still selected
         bool anyNotesSelected = false;
-        for (int i = 0; i < 12; ++i)
+        for (size_t i = 0; i < 12; ++i)
         {
             if (noteButtons[i].getToggleState())
             {
@@ -804,113 +863,18 @@ void MainComponent::onNoteButtonClicked(int noteIndex)
         if (!anyNotesSelected && isPlaying)
         {
             isPlaying = false;
-            playStopButton.setButtonText("Play");
-            playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-            playbackStatusLabel.setText("Stopped", juce::dontSendNotification);
-            playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusStopped);
         }
     }
     
     // Update UI feedback
-    updateChordDisplay();
     updateNoteButtonVisualFeedback();
-    updateActiveNotesDisplay();
     
     // Save state
     saveState();
 }
 
-void MainComponent::onChordButtonClicked(const std::vector<int>& chord)
-{
-    // Add haptic feedback on iOS
-    triggerHapticFeedback();
-    
-    padSynthesizer.triggerChord(chord, 1.0f);
-}
 
-void MainComponent::onPlayStopClicked()
-{
-    // Add haptic feedback on iOS
-    triggerHapticFeedback();
-    
-    // Audio is now initialized in constructor, just check if it's ready
-    if (!isAudioInitialized)
-    {
-        // Audio initialization failed - user was already notified
-        return;
-    }
-    
-    if (isPlaying)
-    {
-        // Stop all notes gracefully using allNotesOff()
-        padSynthesizer.allNotesOff(1, true); // Channel 1, allow tail off for graceful release
-        playStopButton.setButtonText("Play");
-        playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-        isPlaying = false;
-        playbackStatusLabel.setText("Stopped", juce::dontSendNotification);
-        playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusStopped);
-        
-        // Note: We don't reset note button toggles here - let them stay selected
-        // so user can see what was playing and potentially play again
-    }
-    else
-    {
-        // Start playing - iterate through all note toggles and start selected notes
-        bool anyNotesSelected = false;
-        
-        for (int i = 0; i < 12; ++i)
-        {
-            if (noteButtons[i].getToggleState())
-            {
-                int midiNote = 60 + i; // C4 + semitone offset
-                padSynthesizer.noteOn(1, midiNote, 0.8f); // Channel 1, velocity 0.8
-                anyNotesSelected = true;
-            }
-        }
-        
-        // If no notes are selected, do nothing (don't play default)
-        if (anyNotesSelected)
-        {
-            playStopButton.setButtonText("Stop");
-            playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnActive);
-            isPlaying = true;
-            playbackStatusLabel.setText("Playing", juce::dontSendNotification);
-            playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusPlaying);
-        }
-        // If no notes selected, button remains in "Play" state
-    }
-    
-    // Update UI feedback
-    updateNoteButtonVisualFeedback();
-    updateActiveNotesDisplay();
-}
 
-void MainComponent::onReleaseAllClicked()
-{
-    // Stop all notes gracefully using allNotesOff()
-    padSynthesizer.allNotesOff(1, true); // Channel 1, allow tail off for graceful release
-    
-    // Reset all note buttons
-    for (auto& button : noteButtons)
-    {
-        button.setToggleState(false, juce::dontSendNotification);
-    }
-    
-    // Reset play button
-    if (isPlaying)
-    {
-        playStopButton.setButtonText("Play");
-        playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-        isPlaying = false;
-    }
-    
-    // Update UI feedback
-    updateChordDisplay();
-    updateNoteButtonVisualFeedback();
-    updateActiveNotesDisplay();
-    playbackStatusLabel.setText("Stopped", juce::dontSendNotification);
-    playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusStopped);
-}
 
 void MainComponent::onAdvancedControlsToggle()
 {
@@ -945,18 +909,6 @@ void MainComponent::onAdvancedControlsToggle()
     saveState();
 }
 
-void MainComponent::setFrequency(double hz)
-{
-    hz = juce::jlimit(20.0, 22000.0, hz);
-    frequencyHz = hz;
-    freqReadout.setText(juce::String(hz, 1) + " Hz", juce::dontSendNotification);
-    
-    // Update synthesizer frequency
-    padSynthesizer.setGlobalFrequency(hz);
-    
-    // Save state
-    saveState();
-}
 
 void MainComponent::setWave(int idx)
 {
@@ -964,11 +916,11 @@ void MainComponent::setWave(int idx)
     triggerHapticFeedback();
     
     waveIndex = juce::jlimit(0, waves.size() - 1, idx);
-    for (int i = 0; i < waveBtns.size(); ++i)
+    for (size_t i = 0; i < waveBtns.size(); ++i)
         waveBtns[i]->setToggleState(i == waveIndex, juce::dontSendNotification);
     
-    // Update synthesizer waveform
-    padSynthesizer.setGlobalWaveform(waveIndex);
+    // Update STK synthesizer oscillator type
+    ParameterHolder::inst().currentOsc = waveIndex;
     
     // Save state
     saveState();
@@ -976,59 +928,108 @@ void MainComponent::setWave(int idx)
 
 void MainComponent::updateAdvancedControls()
 {
-    if (advancedPanel.sliders[0]) padSynthesizer.setDetuneAmount(static_cast<float>(advancedPanel.sliders[0]->getValue()));
-    if (advancedPanel.sliders[1]) padSynthesizer.setOscillatorCount(static_cast<int>(advancedPanel.sliders[1]->getValue()));
-    if (advancedPanel.sliders[2]) padSynthesizer.setEnvelopeAttack(static_cast<float>(advancedPanel.sliders[2]->getValue()));
-    if (advancedPanel.sliders[3]) padSynthesizer.setEnvelopeDecay(static_cast<float>(advancedPanel.sliders[3]->getValue()));
-    if (advancedPanel.sliders[4]) padSynthesizer.setEnvelopeSustain(static_cast<float>(advancedPanel.sliders[4]->getValue()));
-    if (advancedPanel.sliders[5]) padSynthesizer.setEnvelopeRelease(static_cast<float>(advancedPanel.sliders[5]->getValue()));
-    if (advancedPanel.sliders[6]) padSynthesizer.setFilterCutoff(static_cast<float>(advancedPanel.sliders[6]->getValue()));
-    if (advancedPanel.sliders[7]) padSynthesizer.setFilterResonance(static_cast<float>(advancedPanel.sliders[7]->getValue()));
+    DBG("=== updateAdvancedControls called ===");
     
-    if (advancedPanel.sliders[8]) reverbParams.roomSize = static_cast<float>(advancedPanel.sliders[8]->getValue());
-    if (advancedPanel.sliders[9]) reverbParams.damping = static_cast<float>(advancedPanel.sliders[9]->getValue());
-    if (advancedPanel.sliders[10]) reverbParams.wetLevel = static_cast<float>(advancedPanel.sliders[10]->getValue());
-    if (advancedPanel.sliders[11]) reverbParams.dryLevel = static_cast<float>(advancedPanel.sliders[11]->getValue());
-    reverb.setParameters(reverbParams);
+    // Correct mapping for our 25 warmth parameters:
+    // 0: Detune, 1: Osc Count, 2: Attack, 3: Decay, 4: Sustain, 5: Release,
+    // 6: Filter Cut, 7: Resonance, 8: Filter Env, 9: Filter A, 10: Filter D, 11: Filter S,
+    // 12: Filter R, 13: Filter LFO, 14: Filter Rate, 15: Pitch LFO, 16: Pitch Rate
+    
+    // Volume ADSR parameters (slots 2-5)
+    if (advancedPanel.sliders[2]) ParameterHolder::inst().parameters[VOLUME_A_PARAM].store(static_cast<float>(advancedPanel.sliders[2]->getValue()));
+    if (advancedPanel.sliders[3]) ParameterHolder::inst().parameters[VOLUME_D_PARAM].store(static_cast<float>(advancedPanel.sliders[3]->getValue()));
+    if (advancedPanel.sliders[4]) ParameterHolder::inst().parameters[VOLUME_S_PARAM].store(static_cast<float>(advancedPanel.sliders[4]->getValue()));
+    if (advancedPanel.sliders[5]) ParameterHolder::inst().parameters[VOLUME_R_PARAM].store(static_cast<float>(advancedPanel.sliders[5]->getValue()));
+    
+    // Filter ADSR parameters (slots 9-12)
+    if (advancedPanel.sliders[9]) ParameterHolder::inst().parameters[FILTER_A_PARAM].store(static_cast<float>(advancedPanel.sliders[9]->getValue()));
+    if (advancedPanel.sliders[10]) ParameterHolder::inst().parameters[FILTER_D_PARAM].store(static_cast<float>(advancedPanel.sliders[10]->getValue()));
+    if (advancedPanel.sliders[11]) ParameterHolder::inst().parameters[FILTER_S_PARAM].store(static_cast<float>(advancedPanel.sliders[11]->getValue()));
+    if (advancedPanel.sliders[12]) ParameterHolder::inst().parameters[FILTER_R_PARAM].store(static_cast<float>(advancedPanel.sliders[12]->getValue()));
+    
+    // Filter parameters (slots 6-7 for cutoff/resonance)
+    if (advancedPanel.sliders[6]) ParameterHolder::inst().parameters[FILTER_START_PARAM].store(static_cast<float>(advancedPanel.sliders[6]->getValue()));
+    if (advancedPanel.sliders[7]) ParameterHolder::inst().parameters[FILTER_END_PARAM].store(static_cast<float>(advancedPanel.sliders[6]->getValue())); // Use same for both
+    
+    // LFO parameters (slots 13-14)
+    if (advancedPanel.sliders[14]) ParameterHolder::inst().parameters[LFO_RATE_PARAM].store(static_cast<float>(advancedPanel.sliders[14]->getValue()));
+    if (advancedPanel.sliders[13]) ParameterHolder::inst().parameters[LFO_AMP_PARAM].store(static_cast<float>(advancedPanel.sliders[13]->getValue()));
+    
+    // Note: Detune (slot 0) and Osc Count (slot 1) need to be handled differently
+    // as the STK system doesn't have direct equivalents for these parameters
+    
+    // Reverb controls - use smoothed values for buttery smooth transitions
+    bool reverbChanged = false;
+    if (advancedPanel.sliders[17]) {
+        smoothedReverbRoomSize.setTargetValue(static_cast<float>(advancedPanel.sliders[17]->getValue()));
+        reverbChanged = true;
+    }
+    if (advancedPanel.sliders[18]) {
+        smoothedReverbDamping.setTargetValue(static_cast<float>(advancedPanel.sliders[18]->getValue()));
+        reverbChanged = true;
+    }
+    if (advancedPanel.sliders[19]) {
+        smoothedReverbWet.setTargetValue(static_cast<float>(advancedPanel.sliders[19]->getValue()));
+        reverbChanged = true;
+    }
+    if (advancedPanel.sliders[20]) {
+        smoothedReverbDry.setTargetValue(static_cast<float>(advancedPanel.sliders[20]->getValue()));
+        reverbChanged = true;
+    }
+    if (advancedPanel.sliders[21]) {
+        smoothedReverbWidth.setTargetValue(static_cast<float>(advancedPanel.sliders[21]->getValue()));
+        reverbChanged = true;
+    }
+    
+    // Chorus controls - use smoothed values for buttery smooth transitions
+    bool chorusChanged = false;
+    if (advancedPanel.sliders[22]) {
+        smoothedChorusRate.setTargetValue(static_cast<float>(advancedPanel.sliders[22]->getValue()));
+        chorusChanged = true;
+    }
+    if (advancedPanel.sliders[23]) {
+        smoothedChorusDepth.setTargetValue(static_cast<float>(advancedPanel.sliders[23]->getValue()));
+        chorusChanged = true;
+    }
+    if (advancedPanel.sliders[24]) {
+        smoothedChorusMix.setTargetValue(static_cast<float>(advancedPanel.sliders[24]->getValue()));
+        chorusChanged = true;
+    }
+    
+    // Update effects parameters only when reverb or chorus controls change
+    if (reverbChanged || chorusChanged) {
+        updateEffectsParameters();
+    }
     
     // Save state when advanced controls change
     saveState();
 }
 
-void MainComponent::updateChordDisplay()
+void MainComponent::updateEffectsParameters()
 {
-    // Get currently selected notes
-    std::vector<int> selectedNotes;
-    for (int i = 0; i < 12; ++i)
-    {
-        if (noteButtons[i].getToggleState())
-        {
-            selectedNotes.push_back(60 + i); // C4 + semitone offset
-        }
-    }
+    // Only update effects parameters if device settings have changed
+    // This method should be called when UI controls change, not every audio block
     
-    if (selectedNotes.empty())
-    {
-        chordDisplayLabel.setText("No notes selected", juce::dontSendNotification);
-    }
-    else
-    {
-        juce::String chordName = getChordName(selectedNotes);
-        if (isPlaying)
-        {
-            chordDisplayLabel.setText("Currently playing: " + chordName, juce::dontSendNotification);
-        }
-        else
-        {
-            chordDisplayLabel.setText("Selected: " + chordName, juce::dontSendNotification);
-        }
-    }
+    // Update reverb parameters with current smoothed values
+    reverbParams.roomSize = smoothedReverbRoomSize.getCurrentValue();
+    reverbParams.damping = smoothedReverbDamping.getCurrentValue();
+    reverbParams.wetLevel = 1.0f; // Always 100% wet for auxiliary send/return
+    reverbParams.dryLevel = 0.0f; // Always 0% dry for auxiliary send/return
+    reverbParams.width = smoothedReverbWidth.getCurrentValue();
+    reverb.setParameters(reverbParams);
+    
+    // Update chorus parameters with current smoothed values
+    chorus.setRate(smoothedChorusRate.getCurrentValue());
+    chorus.setDepth(smoothedChorusDepth.getCurrentValue());
+    chorus.setMix(1.0f); // Always 100% wet for auxiliary send/return
+    
+    DBG("Effects parameters updated - Reverb: " << reverbParams.roomSize << ", Chorus: " << smoothedChorusRate.getCurrentValue());
 }
 
 void MainComponent::updateNoteButtonVisualFeedback()
 {
     // Update visual feedback for note buttons based on playback state
-    for (int i = 0; i < 12; ++i)
+    for (size_t i = 0; i < 12; ++i)
     {
         bool isSelected = noteButtons[i].getToggleState();
         bool isCurrentlyPlaying = isPlaying && isSelected;
@@ -1056,99 +1057,7 @@ void MainComponent::updateNoteButtonVisualFeedback()
     }
 }
 
-juce::String MainComponent::getChordName(const std::vector<int>& activeNotes)
-{
-    if (activeNotes.empty())
-        return "No notes";
-    
-    if (activeNotes.size() == 1)
-    {
-        int noteIndex = (activeNotes[0] - 60) % 12;
-        return noteNames[noteIndex];
-    }
-    
-    // Simple chord recognition for common chords
-    std::vector<int> noteClasses;
-    for (int note : activeNotes)
-    {
-        noteClasses.push_back((note - 60) % 12);
-    }
-    std::sort(noteClasses.begin(), noteClasses.end());
-    
-    // Check for major chord (root, major third, perfect fifth)
-    if (noteClasses.size() >= 3)
-    {
-        for (int root = 0; root < 12; ++root)
-        {
-            int majorThird = (root + 4) % 12;
-            int perfectFifth = (root + 7) % 12;
-            
-            if (std::find(noteClasses.begin(), noteClasses.end(), root) != noteClasses.end() &&
-                std::find(noteClasses.begin(), noteClasses.end(), majorThird) != noteClasses.end() &&
-                std::find(noteClasses.begin(), noteClasses.end(), perfectFifth) != noteClasses.end())
-            {
-                return noteNames[root] + " Major";
-            }
-        }
-        
-        // Check for minor chord (root, minor third, perfect fifth)
-        for (int root = 0; root < 12; ++root)
-        {
-            int minorThird = (root + 3) % 12;
-            int perfectFifth = (root + 7) % 12;
-            
-            if (std::find(noteClasses.begin(), noteClasses.end(), root) != noteClasses.end() &&
-                std::find(noteClasses.begin(), noteClasses.end(), minorThird) != noteClasses.end() &&
-                std::find(noteClasses.begin(), noteClasses.end(), perfectFifth) != noteClasses.end())
-            {
-                return noteNames[root] + " Minor";
-            }
-        }
-    }
-    
-    // If no recognized chord, show the notes
-    juce::String result = "";
-    for (size_t i = 0; i < noteClasses.size(); ++i)
-    {
-        if (i > 0) result += " ";
-        result += noteNames[noteClasses[i]];
-    }
-    return result;
-}
 
-void MainComponent::updateActiveNotesDisplay()
-{
-    if (!isPlaying)
-    {
-        activeNotesLabel.setText("", juce::dontSendNotification);
-        return;
-    }
-    
-    // Get currently playing notes
-    std::vector<int> playingNotes;
-    for (int i = 0; i < 12; ++i)
-    {
-        if (noteButtons[i].getToggleState())
-        {
-            playingNotes.push_back(i);
-        }
-    }
-    
-    if (playingNotes.empty())
-    {
-        activeNotesLabel.setText("", juce::dontSendNotification);
-    }
-    else
-    {
-        juce::String activeText = "Playing: ";
-        for (size_t i = 0; i < playingNotes.size(); ++i)
-        {
-            if (i > 0) activeText += " ";
-            activeText += noteNames[playingNotes[i]];
-        }
-        activeNotesLabel.setText(activeText, juce::dontSendNotification);
-    }
-}
 
 // Responsive design helper methods
 int MainComponent::calculateButtonSize(int availableWidth) const
@@ -1220,21 +1129,10 @@ void MainComponent::updateButtonSizes()
         button.setSize(buttonSize, buttonSize);
     }
     
-    // Update chord buttons - responsive sizing
-    int chordButtonWidth = juce::jlimit(100, 150, getWidth() / 5);
-    int chordButtonHeight = juce::jlimit(40, 60, static_cast<int>(buttonSize * 0.7f));
     
-    cMajorButton.setSize(chordButtonWidth, chordButtonHeight);
-    cMinorButton.setSize(chordButtonWidth, chordButtonHeight);
-    cSus2Button.setSize(chordButtonWidth, chordButtonHeight);
-    cSus4Button.setSize(chordButtonWidth, chordButtonHeight);
     
-    // Update control buttons - responsive sizing
-    int controlButtonWidth = juce::jlimit(120, 200, getWidth() / 4);
-    int controlButtonHeight = juce::jlimit(50, 80, buttonSize);
+    // Control button sizing variables removed (no longer needed)
     
-    playStopButton.setSize(controlButtonWidth, controlButtonHeight);
-    releaseAllButton.setSize(controlButtonWidth, controlButtonHeight);
 }
 
 void MainComponent::updateResponsiveLayout()
@@ -1253,9 +1151,6 @@ void MainComponent::updateResponsiveLayout()
     else
         baseFontSize = 24.0f;
     
-    chordDisplayLabel.setFont(Theme::readout(baseFontSize / 44.0f)); // Scale from base readout size
-    playbackStatusLabel.setFont(Theme::label(baseFontSize / 14.0f)); // Scale from base label size
-    activeNotesLabel.setFont(Theme::label(baseFontSize * 0.6f / 14.0f)); // Scale from base label size
     
     // Update title font size for responsive design
     // This will be applied in the paint() method
@@ -1264,22 +1159,34 @@ void MainComponent::updateResponsiveLayout()
     // The layout will be updated when the component is actually resized
 }
 
+void MainComponent::timerCallback()
+{
+    // Stop the timer - we only want to load state once
+    stopTimer();
+    
+    std::cout << "=== Timer callback: Loading saved state after UI construction ===" << std::endl;
+    std::cout.flush();
+    
+    // Load state now that UI is ready
+    loadState();
+    
+    // Update synthesizer parameters with loaded UI values
+    updateAdvancedControls();
+    
+    std::cout << "=== Timer callback: State loading completed ===" << std::endl;
+    std::cout.flush();
+}
+
 void MainComponent::initialiseAudioSafely()
 {
     std::cout << "initialiseAudioSafely() called" << std::endl;
     std::cout.flush();
     
 #if JUCE_IOS
-    // Quick bring-up (Objective-C++) - proper iOS audio setup
+    // Proper iOS audio setup - configure AVAudioSession first
     @autoreleasepool {
         NSError* err = nil;
         AVAudioSession* s = [AVAudioSession sharedInstance];
-        
-        // Deactivate first to ensure clean state
-        [s setActive:NO error:&err];
-        if (err != nil) {
-            DBG("AVAudioSession deactivation error: " << [[err localizedDescription] UTF8String]);
-        }
         
         // Set category to Playback so hardware mute switch doesn't silence us
         [s setCategory:AVAudioSessionCategoryPlayback withOptions:0 error:&err];
@@ -1287,8 +1194,8 @@ void MainComponent::initialiseAudioSafely()
             DBG("AVAudioSession category error: " << [[err localizedDescription] UTF8String]);
         }
         
-        // Accept 48 kHz end-to-end; don't coerce to 44.1 later
-        [s setPreferredSampleRate:48000 error:&err];
+        // Set preferred sample rate (iOS will use the actual device rate)
+        [s setPreferredSampleRate:44100 error:&err];
         if (err != nil) {
             DBG("AVAudioSession sample rate error: " << [[err localizedDescription] UTF8String]);
         }
@@ -1306,126 +1213,38 @@ void MainComponent::initialiseAudioSafely()
         } else {
             const double actualSampleRate = [s sampleRate];
             DBG("AVAudioSession configured successfully - Sample Rate: " << actualSampleRate << " Hz, Channels: " << [s outputNumberOfChannels]);
+        DBG("iOS Audio Route: " << [[[s currentRoute] description] UTF8String]);
+        DBG("iOS Output Volume: " << [s outputVolume]);
         }
         
-        // Set up route change notifications
-        [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionRouteChangeNotification
-                                                          object:nil
-                                                           queue:[NSOperationQueue mainQueue]
-                                                      usingBlock:^(NSNotification* notification) {
-            onAudioRouteChanged();
-        }];
-        
-        // Set up interruption notifications
+        // Set up interruption notifications for proper audio handling
         [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionInterruptionNotification
                                                           object:nil
                                                            queue:[NSOperationQueue mainQueue]
                                                       usingBlock:^(NSNotification* notification) {
             onAudioInterruption((__bridge void*)notification);
         }];
-        
-        // Call setAudioChannels after AVAudioSession is active, and don't sleep—gate on a valid route
-        juce::MessageManager::callAsync([this] {
-            DBG("iOS: Calling setAudioChannels(0, 2)");
-            setAudioChannels(0, 2);   // opens the device => prepareToPlay will run
-        });
     }
+    
+    // CRITICAL: Call setAudioChannels immediately after AVAudioSession setup
+    // This is the key fix - JUCE AudioAppComponent expects this to be called early
+    DBG("iOS: Calling setAudioChannels(0, 2) immediately after AVAudioSession setup");
+    setAudioChannels(0, 2);   // This opens the device and triggers prepareToPlay
+    
 #else
     // Non-iOS platforms: set audio channels immediately
     std::cout << "Non-iOS platform: Calling setAudioChannels(0, 2) immediately" << std::endl;
     std::cout.flush();
     setAudioChannels(0, 2);
-    
-    // Wait a moment for the device to open
-    juce::Thread::sleep(100); // Wait 100ms
-    
-    // Check if audio device opened successfully
-    if (auto* device = deviceManager.getCurrentAudioDevice())
-    {
-        DBG("=== Audio device opened successfully ===");
-        DBG("Device: " << device->getName());
-        DBG("Sample Rate: " << device->getCurrentSampleRate() << " Hz");
-        DBG("Buffer Size: " << device->getCurrentBufferSizeSamples() << " samples");
-        DBG("Output Channels: " << device->getOutputChannelNames().size());
-        
-        // Force prepareToPlay to be called
-        DBG("=== Manually calling prepareToPlay ===");
-        prepareToPlay(device->getCurrentBufferSizeSamples(), device->getCurrentSampleRate());
-    }
-    else
-    {
-        DBG("=== ERROR: Failed to open audio device on non-iOS platform ===");
-        DBG("=== Attempting to manually open audio device ===");
-        
-        // Try to manually open the audio device
-        juce::AudioDeviceManager::AudioDeviceSetup setup;
-        setup.outputDeviceName = ""; // Use default device
-        setup.sampleRate = 44100.0;
-        setup.bufferSize = 256;
-        setup.useDefaultInputChannels = false;
-        setup.useDefaultOutputChannels = true;
-        setup.inputChannels = 0;
-        setup.outputChannels = 2;
-        
-        juce::String error = deviceManager.setAudioDeviceSetup(setup, true);
-        if (error.isEmpty())
-        {
-            DBG("=== Successfully opened audio device manually ===");
-            if (auto* device = deviceManager.getCurrentAudioDevice())
-            {
-                DBG("Device: " << device->getName());
-                DBG("Sample Rate: " << device->getCurrentSampleRate() << " Hz");
-                DBG("Buffer Size: " << device->getCurrentBufferSizeSamples() << " samples");
-                
-                // Force prepareToPlay to be called
-                DBG("=== Manually calling prepareToPlay after manual device open ===");
-                prepareToPlay(device->getCurrentBufferSizeSamples(), device->getCurrentSampleRate());
-            }
-        }
-        else
-        {
-            DBG("=== Failed to open audio device manually: " << error << " ===");
-        }
-    }
 #endif
 }
 
 
 void MainComponent::onAudioRouteChanged()
 {
-#if JUCE_IOS
-    @autoreleasepool {
-        AVAudioSession* session = [AVAudioSession sharedInstance];
-        AVAudioSessionRouteDescription* route = [session currentRoute];
-        
-        // Check if we have a valid output route
-        bool hasValidOutput = NO;
-        for (AVAudioSessionPortDescription* output in [route outputs]) {
-            if ([[output portType] isEqualToString:AVAudioSessionPortBuiltInSpeaker] ||
-                [[output portType] isEqualToString:AVAudioSessionPortHeadphones] ||
-                [[output portType] isEqualToString:AVAudioSessionPortBluetoothA2DP] ||
-                [[output portType] isEqualToString:AVAudioSessionPortBluetoothHFP] ||
-                [[output portType] isEqualToString:AVAudioSessionPortAirPlay]) {
-                hasValidOutput = YES;
-                break;
-            }
-        }
-        
-        DBG("Audio route changed - Has valid output: " << (hasValidOutput ? "YES" : "NO"));
-        
-        if (hasValidOutput && !audioRouteReady) {
-            // Route is ready, initialize audio channels
-            audioRouteReady = true;
-            setAudioChannels(0, 2);
-            isAudioInitialized = false;
-            DBG("Audio route ready - Audio channels initialized");
-        } else if (!hasValidOutput && audioRouteReady) {
-            // Route became invalid, mark as not ready
-            audioRouteReady = false;
-            DBG("Audio route became invalid - Waiting for valid route");
-        }
-    }
-#endif
+    // Route change handling is now simplified - JUCE handles most of this automatically
+    // when setAudioChannels is called properly in the constructor
+    DBG("Audio route changed - JUCE will handle this automatically");
 }
 
 void MainComponent::onAudioInterruption(void* notification)
@@ -1441,16 +1260,12 @@ void MainComponent::onAudioInterruption(void* notification)
             DBG("Audio interruption began - closing audio device");
             
             // Stop all audio and close the device
-            padSynthesizer.allNotesOff(1, true); // Graceful release
+            synth.allNotesOff(1, true); // Graceful release
             deviceManager.closeAudioDevice();
             isAudioInitialized = false;
             
             // Update UI to reflect stopped state
             isPlaying = false;
-            playStopButton.setButtonText("Play");
-            playStopButton.setColour(juce::TextButton::buttonColourId, Theme::btnOff);
-            playbackStatusLabel.setColour(juce::Label::textColourId, Theme::statusStopped);
-            playbackStatusLabel.setText("Stopped", juce::dontSendNotification);
         }
         else if (interruptionType == AVAudioSessionInterruptionTypeEnded)
         {
@@ -1483,7 +1298,6 @@ void MainComponent::onAudioInterruption(void* notification)
                         if (deviceManager.getCurrentAudioDevice() != nullptr)
                         {
                             isAudioInitialized = true;
-                            audioRouteReady = true;
                             DBG("Audio device reopened successfully after interruption");
                         }
                         else
@@ -1521,16 +1335,11 @@ void MainComponent::triggerHapticFeedback()
             DBG("Haptic feedback generators initialized for device");
         }
         
-        // Try heavy haptic feedback first (most noticeable)
-        [heavyGenerator prepare];
-        [heavyGenerator impactOccurred];
+        // Use light haptic feedback for subtle tactile response
+        [lightGenerator prepare];
+        [lightGenerator impactOccurred];
         
-        // Also try a selection feedback for additional tactile response
-        UISelectionFeedbackGenerator* selectionGenerator = [[UISelectionFeedbackGenerator alloc] init];
-        [selectionGenerator prepare];
-        [selectionGenerator selectionChanged];
-        
-        DBG("Heavy haptic feedback triggered on device");
+        DBG("Light haptic feedback triggered on device");
     }
     else
     {
@@ -1541,18 +1350,8 @@ void MainComponent::triggerHapticFeedback()
 
 void MainComponent::toggleTestTone()
 {
-    testToneEnabled = !testToneEnabled;
-    DBG("Test tone " << (testToneEnabled ? "enabled" : "disabled"));
-    
-    // Show user feedback
-    juce::AlertWindow::showMessageBoxAsync(
-        juce::AlertWindow::InfoIcon,
-        "Audio Debug",
-        testToneEnabled ? 
-            "Test tone enabled - You should hear a 440 Hz sine wave" :
-            "Test tone disabled - Normal synthesizer audio restored",
-        "OK"
-    );
+    // Test tone functionality removed for clean baseline
+    DBG("Test tone functionality removed - using clean synthesizer baseline");
 }
 
 void MainComponent::initializePropertiesFile()
@@ -1576,14 +1375,11 @@ void MainComponent::saveState()
     // Save waveform selection
     propertiesFile->setValue("waveform", waveIndex);
     
-    // Save volume settings
-    propertiesFile->setValue("masterVolume", masterSlider.getValue());
-    propertiesFile->setValue("leftVolume", leftSlider.getValue());
-    propertiesFile->setValue("rightVolume", rightSlider.getValue());
+    // Volume settings removed from persistence
     
     // Save selected notes
     juce::StringArray selectedNotes;
-    for (int i = 0; i < 12; ++i)
+    for (size_t i = 0; i < 12; ++i)
     {
         if (noteButtons[i].getToggleState())
         {
@@ -1592,8 +1388,6 @@ void MainComponent::saveState()
     }
     propertiesFile->setValue("selectedNotes", selectedNotes.joinIntoString(","));
     
-    // Save frequency
-    propertiesFile->setValue("frequency", frequencyHz);
     
     // Save advanced controls visibility
     propertiesFile->setValue("showAdvancedControls", showAdvanced);
@@ -1607,10 +1401,23 @@ void MainComponent::saveState()
     if (advancedPanel.sliders[5]) propertiesFile->setValue("release", advancedPanel.sliders[5]->getValue());
     if (advancedPanel.sliders[6]) propertiesFile->setValue("filterCutoff", advancedPanel.sliders[6]->getValue());
     if (advancedPanel.sliders[7]) propertiesFile->setValue("filterResonance", advancedPanel.sliders[7]->getValue());
-    if (advancedPanel.sliders[8]) propertiesFile->setValue("reverbRoomSize", advancedPanel.sliders[8]->getValue());
-    if (advancedPanel.sliders[9]) propertiesFile->setValue("reverbDamping", advancedPanel.sliders[9]->getValue());
-    if (advancedPanel.sliders[10]) propertiesFile->setValue("reverbWetLevel", advancedPanel.sliders[10]->getValue());
-    if (advancedPanel.sliders[11]) propertiesFile->setValue("reverbDryLevel", advancedPanel.sliders[11]->getValue());
+    if (advancedPanel.sliders[8]) propertiesFile->setValue("filterEnvelopeAmount", advancedPanel.sliders[8]->getValue());
+    if (advancedPanel.sliders[9]) propertiesFile->setValue("filterEnvelopeAttack", advancedPanel.sliders[9]->getValue());
+    if (advancedPanel.sliders[10]) propertiesFile->setValue("filterEnvelopeDecay", advancedPanel.sliders[10]->getValue());
+    if (advancedPanel.sliders[11]) propertiesFile->setValue("filterEnvelopeSustain", advancedPanel.sliders[11]->getValue());
+    if (advancedPanel.sliders[12]) propertiesFile->setValue("filterEnvelopeRelease", advancedPanel.sliders[12]->getValue());
+    if (advancedPanel.sliders[13]) propertiesFile->setValue("filterLFODepth", advancedPanel.sliders[13]->getValue());
+    if (advancedPanel.sliders[14]) propertiesFile->setValue("filterLFORate", advancedPanel.sliders[14]->getValue());
+    if (advancedPanel.sliders[15]) propertiesFile->setValue("pitchLFODepth", advancedPanel.sliders[15]->getValue());
+    if (advancedPanel.sliders[16]) propertiesFile->setValue("pitchLFORate", advancedPanel.sliders[16]->getValue());
+    if (advancedPanel.sliders[17]) propertiesFile->setValue("reverbRoomSize", advancedPanel.sliders[17]->getValue());
+    if (advancedPanel.sliders[18]) propertiesFile->setValue("reverbDamping", advancedPanel.sliders[18]->getValue());
+    if (advancedPanel.sliders[19]) propertiesFile->setValue("reverbWet", advancedPanel.sliders[19]->getValue());
+    if (advancedPanel.sliders[20]) propertiesFile->setValue("reverbDry", advancedPanel.sliders[20]->getValue());
+    if (advancedPanel.sliders[21]) propertiesFile->setValue("reverbWidth", advancedPanel.sliders[21]->getValue());
+    if (advancedPanel.sliders[22]) propertiesFile->setValue("chorusRate", advancedPanel.sliders[22]->getValue());
+    if (advancedPanel.sliders[23]) propertiesFile->setValue("chorusDepth", advancedPanel.sliders[23]->getValue());
+    if (advancedPanel.sliders[24]) propertiesFile->setValue("chorusMix", advancedPanel.sliders[24]->getValue());
     
     // Save the file
     propertiesFile->saveIfNeeded();
@@ -1622,13 +1429,10 @@ void MainComponent::loadState()
     if (propertiesFile == nullptr) return;
     
     // Load waveform selection
-    waveIndex = propertiesFile->getIntValue("waveform", 0);
+    waveIndex = propertiesFile->getIntValue("waveform", 2); // Default to Triangle wave for warmth with richer harmonics
     setWave(waveIndex);
     
-    // Load volume settings
-    masterSlider.setValue(propertiesFile->getDoubleValue("masterVolume", 0.8));
-    leftSlider.setValue(propertiesFile->getDoubleValue("leftVolume", 0.8));
-    rightSlider.setValue(propertiesFile->getDoubleValue("rightVolume", 0.8));
+    // Volume settings removed from persistence
     
     // Load selected notes
     juce::String selectedNotesStr = propertiesFile->getValue("selectedNotes", "");
@@ -1638,7 +1442,7 @@ void MainComponent::loadState()
         selectedNotes.addTokens(selectedNotesStr, ",", "");
         
         // Clear all notes first
-        for (int i = 0; i < 12; ++i)
+        for (size_t i = 0; i < 12; ++i)
         {
             noteButtons[i].setToggleState(false, juce::dontSendNotification);
         }
@@ -1654,35 +1458,43 @@ void MainComponent::loadState()
         }
     }
     
-    // Load frequency
-    frequencyHz = propertiesFile->getDoubleValue("frequency", 440.0);
-    setFrequency(frequencyHz);
     
     // Load advanced controls visibility
     showAdvanced = propertiesFile->getBoolValue("showAdvancedControls", false);
     advancedControlsToggle.setToggleState(showAdvanced, juce::dontSendNotification);
     
-    // Load advanced control values
-    if (advancedPanel.sliders[0]) advancedPanel.sliders[0]->setValue(propertiesFile->getDoubleValue("detune", 0.1));
-    if (advancedPanel.sliders[1]) advancedPanel.sliders[1]->setValue(propertiesFile->getDoubleValue("oscillatorCount", 4.0));
-    if (advancedPanel.sliders[2]) advancedPanel.sliders[2]->setValue(propertiesFile->getDoubleValue("attack", 0.01));
-    if (advancedPanel.sliders[3]) advancedPanel.sliders[3]->setValue(propertiesFile->getDoubleValue("decay", 0.3));
-    if (advancedPanel.sliders[4]) advancedPanel.sliders[4]->setValue(propertiesFile->getDoubleValue("sustain", 0.7));
-    if (advancedPanel.sliders[5]) advancedPanel.sliders[5]->setValue(propertiesFile->getDoubleValue("release", 2.0));
-    if (advancedPanel.sliders[6]) advancedPanel.sliders[6]->setValue(propertiesFile->getDoubleValue("filterCutoff", 2000.0));
-    if (advancedPanel.sliders[7]) advancedPanel.sliders[7]->setValue(propertiesFile->getDoubleValue("filterResonance", 0.7));
-    if (advancedPanel.sliders[8]) advancedPanel.sliders[8]->setValue(propertiesFile->getDoubleValue("reverbRoomSize", 0.5));
-    if (advancedPanel.sliders[9]) advancedPanel.sliders[9]->setValue(propertiesFile->getDoubleValue("reverbDamping", 0.5));
-    if (advancedPanel.sliders[10]) advancedPanel.sliders[10]->setValue(propertiesFile->getDoubleValue("reverbWetLevel", 0.3));
-    if (advancedPanel.sliders[11]) advancedPanel.sliders[11]->setValue(propertiesFile->getDoubleValue("reverbDryLevel", 0.4));
+    // Load advanced control values with lush, deep sound defaults
+    if (advancedPanel.sliders[0]) advancedPanel.sliders[0]->setValue(propertiesFile->getDoubleValue("detune", 0.12)); // More detuning for lushness
+        if (advancedPanel.sliders[1]) advancedPanel.sliders[1]->setValue(propertiesFile->getDoubleValue("oscillatorCount", 4.0)); // 4 oscillators for richness
+        if (advancedPanel.sliders[2]) advancedPanel.sliders[2]->setValue(propertiesFile->getDoubleValue("attack", 0.15)); // Slightly slower for lushness
+        if (advancedPanel.sliders[3]) advancedPanel.sliders[3]->setValue(propertiesFile->getDoubleValue("decay", 0.12)); // Slightly slower
+        if (advancedPanel.sliders[4]) advancedPanel.sliders[4]->setValue(propertiesFile->getDoubleValue("sustain", 0.85)); // Higher for lushness
+        if (advancedPanel.sliders[5]) advancedPanel.sliders[5]->setValue(propertiesFile->getDoubleValue("release", 0.4)); // Longer for lushness
+    if (advancedPanel.sliders[6]) advancedPanel.sliders[6]->setValue(propertiesFile->getDoubleValue("filterCutoff", 1200.0)); // Higher for brightness
+    if (advancedPanel.sliders[7]) advancedPanel.sliders[7]->setValue(propertiesFile->getDoubleValue("filterResonance", 0.55)); // More resonance for character
+    if (advancedPanel.sliders[8]) advancedPanel.sliders[8]->setValue(propertiesFile->getDoubleValue("filterEnvelopeAmount", 500.0)); // More movement
+    if (advancedPanel.sliders[9]) advancedPanel.sliders[9]->setValue(propertiesFile->getDoubleValue("filterEnvelopeAttack", 0.3)); // Faster attack
+    if (advancedPanel.sliders[10]) advancedPanel.sliders[10]->setValue(propertiesFile->getDoubleValue("filterEnvelopeDecay", 0.5)); // Medium decay
+    if (advancedPanel.sliders[11]) advancedPanel.sliders[11]->setValue(propertiesFile->getDoubleValue("filterEnvelopeSustain", 0.7)); // Higher sustain
+    if (advancedPanel.sliders[12]) advancedPanel.sliders[12]->setValue(propertiesFile->getDoubleValue("filterEnvelopeRelease", 0.8)); // Medium release
+    if (advancedPanel.sliders[13]) advancedPanel.sliders[13]->setValue(propertiesFile->getDoubleValue("filterLFODepth", 15.0)); // More movement
+    if (advancedPanel.sliders[14]) advancedPanel.sliders[14]->setValue(propertiesFile->getDoubleValue("filterLFORate", 0.08)); // Slower for lushness
+    if (advancedPanel.sliders[15]) advancedPanel.sliders[15]->setValue(propertiesFile->getDoubleValue("pitchLFODepth", 0.5)); // Subtle pitch movement
+    if (advancedPanel.sliders[16]) advancedPanel.sliders[16]->setValue(propertiesFile->getDoubleValue("pitchLFORate", 4.5)); // Slower for lushness
+    if (advancedPanel.sliders[17]) advancedPanel.sliders[17]->setValue(propertiesFile->getDoubleValue("reverbRoomSize", 0.85)); // Large room for depth
+    if (advancedPanel.sliders[18]) advancedPanel.sliders[18]->setValue(propertiesFile->getDoubleValue("reverbDamping", 0.35)); // Less damping for lushness
+    if (advancedPanel.sliders[19]) advancedPanel.sliders[19]->setValue(propertiesFile->getDoubleValue("reverbWet", 0.45)); // More reverb for lushness
+    if (advancedPanel.sliders[20]) advancedPanel.sliders[20]->setValue(propertiesFile->getDoubleValue("reverbDry", 0.8)); // Less dry
+    if (advancedPanel.sliders[21]) advancedPanel.sliders[21]->setValue(propertiesFile->getDoubleValue("reverbWidth", 1.0)); // Full stereo width
+    if (advancedPanel.sliders[22]) advancedPanel.sliders[22]->setValue(propertiesFile->getDoubleValue("chorusRate", 0.15)); // Slower for lushness
+    if (advancedPanel.sliders[23]) advancedPanel.sliders[23]->setValue(propertiesFile->getDoubleValue("chorusDepth", 0.45)); // Deeper modulation
+    if (advancedPanel.sliders[24]) advancedPanel.sliders[24]->setValue(propertiesFile->getDoubleValue("chorusMix", 0.25)); // More chorus for richness
     
     // Update synthesizer with loaded values
     updateAdvancedControls();
     
     // Update UI feedback
-    updateChordDisplay();
     updateNoteButtonVisualFeedback();
-    updateActiveNotesDisplay();
     
     DBG("State loaded successfully");
 }
@@ -1697,84 +1509,41 @@ void MainComponent::loadSettings()
     loadState();
 }
 
-void MainComponent::setupAccessibilityFocusOrder()
+void MainComponent::setupBasicAccessibilityFocusOrder()
 {
-    // Set up focus order: note grid first, then chords, then transport
-    // This ensures VoiceOver users can navigate logically through the interface
+    // Set up focus order for basic controls only (fast startup)
+    // Advanced sliders will get their focus order when lazily loaded
     
     // Note buttons (0-11) - first priority
-    for (int i = 0; i < 12; ++i)
+    for (size_t i = 0; i < 12; ++i)
     {
         noteButtons[i].setExplicitFocusOrder(i + 1);
     }
     
-    // Chord buttons (12-15) - second priority
-    cMajorButton.setExplicitFocusOrder(13);
-    cMinorButton.setExplicitFocusOrder(14);
-    cSus2Button.setExplicitFocusOrder(15);
-    cSus4Button.setExplicitFocusOrder(16);
-    
-    // Transport controls (17-18) - third priority
-    playStopButton.setExplicitFocusOrder(17);
-    releaseAllButton.setExplicitFocusOrder(18);
-    
-    // Waveform controls (19-22) - fourth priority
-    for (int i = 0; i < waveBtns.size(); ++i)
+    // Waveform controls (15-18) - second priority
+    for (size_t i = 0; i < waveBtns.size(); ++i)
     {
-        waveBtns[i]->setExplicitFocusOrder(19 + i);
+        waveBtns[i]->setExplicitFocusOrder(15 + i);
     }
     
-    // Volume controls (23-25) - fifth priority
-    masterSlider.setExplicitFocusOrder(23);
-    leftSlider.setExplicitFocusOrder(24);
-    rightSlider.setExplicitFocusOrder(25);
-    
-    // Advanced controls toggle (26) - sixth priority
-    advancedControlsToggle.setExplicitFocusOrder(26);
-    
-    // Advanced controls sliders (27+) - last priority
-    int focusOrder = 27;
-    for (int i = 0; i < 12; ++i) {
+    // Advanced controls toggle (19) - hidden, no focus order needed
+    // advancedControlsToggle.setExplicitFocusOrder(19);
+}
+
+void MainComponent::setupAdvancedAccessibilityFocusOrder()
+{
+    // Set up focus order for advanced controls sliders (called during lazy loading)
+    int focusOrder = 20;
+    for (size_t i = 0; i < 25; ++i) { // Updated for 25 sliders
         if (advancedPanel.sliders[i]) {
             advancedPanel.sliders[i]->setExplicitFocusOrder(focusOrder++);
         }
     }
 }
 
-void MainComponent::mouseDown(const juce::MouseEvent& e)
-{
-    dragStart = e.getPosition();
-    startFreq = frequencyHz;
-}
-
-void MainComponent::mouseDrag(const juce::MouseEvent& e)
-{
-    auto delta = e.getPosition() - dragStart;
-    const int dx = delta.x, dy = delta.y;
-
-    // Horizontal: ±10 Hz per "step" of ~16 px
-    if (std::abs(dx) >= 16)
-    {
-        int steps = dx / 16;
-        setFrequency(startFreq + steps * 10.0);
-    }
-    // Vertical: ±1 Hz per ~12 px (note: up should increase)
-    if (std::abs(dy) >= 12)
-    {
-        int steps = -dy / 12;
-        setFrequency(frequencyHz + steps * 1.0);
-    }
-}
 
 bool MainComponent::keyPressed(const juce::KeyPress& key)
 {
-    // Press 'T' to toggle test tone for audio debugging
-    if (key.getKeyCode() == 'T' || key.getKeyCode() == 't')
-    {
-        toggleTestTone();
-        return true;
-    }
-    
     // Press 'D' to show audio device info
     if (key.getKeyCode() == 'D' || key.getKeyCode() == 'd')
     {
@@ -1786,7 +1555,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
             info += "Buffer Size: " + juce::String(device->getCurrentBufferSizeSamples()) + " samples\n";
             info += "Output Channels: " + juce::String(device->getOutputChannelNames().size()) + "\n";
             info += "Audio Initialized: " + juce::String(isAudioInitialized ? "Yes" : "No") + "\n";
-            info += "Test Tone: " + juce::String(testToneEnabled ? "Enabled" : "Disabled");
+            info += "Polyphony: " + juce::String(synth.getNumVoices()) + " voices";
             
             juce::AlertWindow::showMessageBoxAsync(
                 juce::AlertWindow::InfoIcon,
@@ -1809,3 +1578,66 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     
     return false;
 }
+
+// Performance optimization methods
+void MainComponent::adjustPerformanceSettings()
+{
+    // Monitor CPU usage periodically
+    if (++cpuUsageCounter >= CPU_MONITOR_INTERVAL)
+    {
+        cpuUsageCounter = 0;
+        
+        // Simple CPU monitoring: check if we're using too many voices
+        int activeVoices = 0;
+        for (int i = 0; i < synth.getNumVoices(); ++i)
+        {
+            if (auto* voice = synth.getVoice(i))
+            {
+                if (voice->isVoiceActive())
+                    activeVoices++;
+            }
+        }
+        
+        // Adjust performance mode based on active voices
+        if (activeVoices > 8 && performanceMode < 2)
+        {
+            setPerformanceMode(performanceMode + 1);
+            DBG("Performance mode increased to: " << performanceMode);
+        }
+        else if (activeVoices <= 4 && performanceMode > 0)
+        {
+            setPerformanceMode(performanceMode - 1);
+            DBG("Performance mode decreased to: " << performanceMode);
+        }
+    }
+}
+
+void MainComponent::setPerformanceMode(int mode)
+{
+    performanceMode = juce::jlimit(0, 2, mode);
+    
+    // Apply performance optimizations based on mode
+    switch (performanceMode)
+    {
+        case 0: // Normal mode - full quality
+            // No optimizations needed
+            break;
+            
+        case 1: // Reduced mode - reduce unison count and chorus depth
+            // Reduce unison count to 4 oscillators
+            // Note: STK synthesizer doesn't have oscillator count setting
+            // Reduce chorus depth
+            smoothedChorusDepth.setTargetValue(0.2f);
+            break;
+            
+        case 2: // Minimal mode - further reductions
+            // Reduce unison count to 2 oscillators
+            // Note: STK synthesizer doesn't have oscillator count setting
+            // Further reduce chorus depth
+            smoothedChorusDepth.setTargetValue(0.1f);
+            // Reduce reverb wet level
+            smoothedReverbWet.setTargetValue(0.2f);
+            break;
+    }
+}
+

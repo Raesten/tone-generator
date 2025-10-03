@@ -508,11 +508,9 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
     {
         const auto session = [AVAudioSession sharedInstance];
 
-        // On iOS 18 the AVAudioSession sample rate is not always accurate but
-        // probing the sample rate via an AudioQueue seems to work reliably
-        if (@available (ios 18, *))
-            return getSampleRateFromAudioQueue().value_or (session.sampleRate);
-
+        // PATCH: Use safe AVAudioSession approach on all iOS versions to avoid AudioQueue -50 error
+        // The original code only used this on iOS 18+, but the AudioQueue approach fails on iOS Simulator
+        // and some iOS versions, causing the -50 param error. This patch ensures reliable audio initialization.
         return session.sampleRate;
     }
 
